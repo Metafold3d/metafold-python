@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metafold"
+version = "0.1.0"
+readme = "README.md"
+description = "Metafold SDK for Python"
+requires-python = ">=3.10"
+dependencies = [
+    "attrs>=23.2",
+    "requests>=2.31",
+    "sphinx>=7.2",
+    "sphinx_rtd_theme>=2.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.3",
+    "requests-toolbelt>=1.0",
+]

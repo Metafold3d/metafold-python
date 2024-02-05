@@ -33,8 +33,9 @@ With an access token and project ID you can now initialize the
     from metafold import MetafoldClient
 
     access_token = "..."
+    project_id = "123"
 
-    metafold = MetafoldClient(access_token, "123")
+    metafold = MetafoldClient(access_token, project_id)
 
 Follow our :ref:`Quickstart guide <client-initialized>` or jump straight into some more
 `complete examples`_ in the source code repo.

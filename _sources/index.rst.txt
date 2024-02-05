@@ -16,8 +16,9 @@ against. ::
     from metafold import MetafoldClient
 
     access_token = "..."
+    project_id = "123"
 
-    metafold = MetafoldClient(access_token, "123")
+    metafold = MetafoldClient(access_token, project_id)
 
 .. _client-initialized:
 

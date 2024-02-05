@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Metafold SDK for Python &mdash; metafold  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Initializing The Client" href="init.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            metafold
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="init.html">Initializing The Client</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">metafold</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Metafold SDK for Python</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="metafold-sdk-for-python">
+<h1>Metafold SDK for Python<a class="headerlink" href="#metafold-sdk-for-python" title="Link to this heading"></a></h1>
+<section id="quickstart">
+<h2>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h2>
+<p>Create a <code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.MetafoldClient</span></code> to interact with the API. To do so you will
+need <a class="reference internal" href="init.html"><span class="doc">an access token and the ID of a project</span></a> to perform operations
+against.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">metafold</span> <span class="kn">import</span> <span class="n">MetafoldClient</span>
+
+<span class="n">access_token</span> <span class="o">=</span> <span class="s2">&quot;...&quot;</span>
+
+<span class="n">metafold</span> <span class="o">=</span> <span class="n">MetafoldClient</span><span class="p">(</span><span class="n">access_token</span><span class="p">,</span> <span class="s2">&quot;123&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p id="client-initialized">With the client initialized, you can now start running jobs. For example, we can
+evaluate the surface area of a single gyroid unit cell:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">job</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">jobs</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;evaluate_metrics&quot;</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">&quot;graph&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;operators&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;GenerateSamplePoints&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span>
+                    <span class="s2">&quot;resolution&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">],</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;SampleSurfaceLattice&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;lattice_type&quot;</span><span class="p">:</span> <span class="s2">&quot;Gyroid&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Redistance&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;size&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;Threshold&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;parameters&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;width&quot;</span><span class="p">:</span> <span class="mf">0.04</span><span class="p">,</span>
+                <span class="p">},</span>
+            <span class="p">},</span>
+        <span class="p">],</span>
+        <span class="s2">&quot;edges&quot;</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Points&quot;</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;Samples&quot;</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;Samples&quot;</span><span class="p">]},</span>
+        <span class="p">],</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;point_source&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;surface_area&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Jobs are expected to complete within minutes (with some exceptions). You may increase
+the <code class="docutils literal notranslate"><span class="pre">timeout</span></code> when calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">metafold.jobs.JobsEndpoint.run()</span></code>:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">job</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">jobs</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>  <span class="c1"># 10 mins</span>
+</pre></div>
+</div>
+<p>Many jobs require assets. You can upload an asset to your project directly from disk:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">asset</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">assets</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="s2">&quot;/path/to/mesh.obj&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">asset</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>You can list the assets in the project. The list should include the asset you just
+uploaded:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">assets</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">assets</span><span class="o">.</span><span class="n">list</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">assets</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>You can also filter the list for assets with a specific name. Filter queries use a
+simple syntax, see the <a class="reference external" href="https://metafold3d.notion.site/Metafold-REST-API-059f01a419a74811a9d2dcafe75c871b#65833c70939d4d6490f2a4defe825d46">API documentation</a> for more details.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">assets</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">assets</span><span class="o">.</span><span class="n">list</span><span class="p">(</span><span class="n">q</span><span class="o">=</span><span class="s2">&quot;filename:mesh.obj&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Assets are referenced in job parameters by <strong>filename</strong>. For example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">job</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">jobs</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;sample_triangle_mesh&quot;</span><span class="p">,</span> <span class="p">{</span>
+    <span class="s2">&quot;mesh_filename&quot;</span><span class="p">:</span> <span class="n">asset</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span>  <span class="c1"># &quot;mesh.obj&quot;</span>
+    <span class="s2">&quot;max_resolution&quot;</span><span class="p">:</span> <span class="mi">128</span><span class="p">,</span>
+<span class="p">})</span>
+</pre></div>
+</div>
+<p>Most jobs produce at least one asset. You may access them from the returned
+<code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.jobs.Job</span></code> object:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>For more complete examples, please refer to the <a class="reference external" href="https://github.com/Metafold3d/metafold-python/tree/master/examples">examples</a> in the source code repo.</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="init.html">Initializing The Client</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="init.html#authorization">Authorization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="init.html#project-id">Project ID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="init.html#initialization">Initialization</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="metafold.html">metafold package</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+<section id="indices-and-tables">
+<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="init.html" class="btn btn-neutral float-right" title="Initializing The Client" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Metafold 3D.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

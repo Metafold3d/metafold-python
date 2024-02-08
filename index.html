@@ -75,9 +75,15 @@
              
   <section id="metafold-sdk-for-python">
 <h1>Metafold SDK for Python<a class="headerlink" href="#metafold-sdk-for-python" title="Link to this heading"></a></h1>
+<section id="installation">
+<h2>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pip</span> <span class="n">install</span> <span class="n">metafold</span>
+</pre></div>
+</div>
+</section>
 <section id="quickstart">
 <h2>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h2>
-<p>Create a <code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.MetafoldClient</span></code> to interact with the API. To do so you will
+<p>Create a <a class="reference internal" href="metafold.html#metafold.MetafoldClient" title="metafold.MetafoldClient"><code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.MetafoldClient</span></code></a> to interact with the API. To do so you will
 need <a class="reference internal" href="init.html"><span class="doc">an access token and the ID of a project</span></a> to perform operations
 against.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">metafold</span> <span class="kn">import</span> <span class="n">MetafoldClient</span>
@@ -133,7 +139,7 @@ evaluate the surface area of a single gyroid unit cell:</p>
 </pre></div>
 </div>
 <p>Jobs are expected to complete within minutes (with some exceptions). You may increase
-the <code class="docutils literal notranslate"><span class="pre">timeout</span></code> when calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">metafold.jobs.JobsEndpoint.run()</span></code>:</p>
+the <code class="docutils literal notranslate"><span class="pre">timeout</span></code> when calling <a class="reference internal" href="metafold.html#metafold.jobs.JobsEndpoint.run" title="metafold.jobs.JobsEndpoint.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">metafold.jobs.JobsEndpoint.run()</span></code></a>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">job</span> <span class="o">=</span> <span class="n">metafold</span><span class="o">.</span><span class="n">jobs</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span>  <span class="c1"># 10 mins</span>
 </pre></div>
 </div>
@@ -163,7 +169,7 @@ simple syntax, see the <a class="reference external" href="https://metafold3d.no
 </pre></div>
 </div>
 <p>Most jobs produce at least one asset. You may access them from the returned
-<code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.jobs.Job</span></code> object:</p>
+<a class="reference internal" href="metafold.html#metafold.jobs.Job" title="metafold.jobs.Job"><code class="xref py py-class docutils literal notranslate"><span class="pre">metafold.jobs.Job</span></code></a> object:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">assets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 </pre></div>
 </div>

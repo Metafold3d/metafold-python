@@ -4,7 +4,7 @@ Initializing The Client
 Authorization
 -------------
 
-Your access token may be found on your **Account** page.
+Your access token may be found on your `Account page`_.
 
 .. image:: account.png
    :alt: account page
@@ -12,6 +12,8 @@ Your access token may be found on your **Account** page.
 Note the access token expires every 24 hours and will require manual refreshing. If you
 have a use case that requires longer-term access to the API, please reach out to
 `info@metafold3d.com <mailto:info@metafold3d.com>`_.
+
+.. _Account page: https://app.metafold3d.com/account
 
 Project ID
 ----------

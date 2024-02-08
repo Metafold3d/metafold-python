@@ -1,5 +1,7 @@
 # Metafold SDK for Python
 
+[![PyPi](https://img.shields.io/pypi/v/metafold.svg)](https://pypi.python.org/pypi/metafold)
+
 ## Installation
 
 ```
@@ -8,7 +10,7 @@ pip install metafold
 
 ## Usage
 
-```
+```python
 from metafold import MetafoldClient
 
 access_token = "..."

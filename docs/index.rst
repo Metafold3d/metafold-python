@@ -6,6 +6,13 @@
 Metafold SDK for Python
 =======================
 
+Installation
+------------
+
+.. code-block::
+
+    pip install metafold
+
 Quickstart
 ----------
 

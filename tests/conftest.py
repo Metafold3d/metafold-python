@@ -17,4 +17,4 @@ def api(request_handler):
 
 @pytest.fixture(scope="session")
 def client():
-    return MetafoldClient("test_token", "1", base_url="http://localhost:8000")
+    return MetafoldClient("testtoken", "1", base_url="http://localhost:8000")

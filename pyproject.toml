@@ -4,18 +4,42 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metafold"
-version = "0.1.0"
-readme = "README.md"
-description = "Metafold SDK for Python"
-requires-python = ">=3.10"
+version = "0.1.1"
+authors = [
+    {name = "Metafold 3D", email = "info@metafold3d.com"},
+]
 dependencies = [
     "attrs>=23.2",
     "requests>=2.31",
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+description = "Metafold SDK for Python"
+requires-python = ">=3.10"
+keywords = ["metafold", "api", "sdk", "implicit geometry"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+Homepage = "https://www.metafold3d.com/"
+Documentation = "https://metafold3d.github.io/metafold-python/"
+Repository = "https://github.com/Metafold3d/metafold-python.git"
+Issues = "https://github.com/Metafold3d/metafold-python/issues"
+
+[project.optional-dependencies]
+docs = [
     "sphinx>=7.2",
     "sphinx_rtd_theme>=2.0",
 ]
-
-[project.optional-dependencies]
 test = [
     "pytest>=7.3",
     "requests-toolbelt>=1.0",

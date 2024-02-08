@@ -62,7 +62,7 @@ def main() -> None:
 
 
 def evaluate_metrics(access_token: str, project_id: str, lattice_type: str) -> None:
-    metafold = MetafoldClient(access_token, project_id, "https://dev-api.metafold3d.com/")
+    metafold = MetafoldClient(access_token, project_id)
 
     print(f"Running evaluate_metrics ({lattice_type}) job...")
     job = metafold.jobs.run("evaluate_metrics", {

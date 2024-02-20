@@ -1,7 +1,7 @@
-"""Example script demonstrating running multiple jobs.
+"""Example script demonstrating running multiple jobs (beam lattices).
 
 Usage:
-    python examples/lattice_metrics.py -t <token> -p <project>
+    python examples/beam_lattice_metrics.py -t <token> -p <project>
 
 For more details on the available job types please refer to the Metafold REST API
 documentation.
@@ -9,38 +9,25 @@ documentation.
 from argparse import ArgumentParser
 from metafold import MetafoldClient
 from pprint import pprint
+from typing import TypedDict
 import os
+import requests
 
-lattice_types = [
-    "Gyroid",
-    "SchwarzD",
-    "I2Y",
-    "CI2Y",
-    "S",
-    "SD1",
-    "P",
-    "F",
-    "Schwarz",
-    "D",
-    "IWP",
-    "CD",
-    "CP",
-    "CY",
-    "CS",
-    "W",
-    "Y",
-    "C_Y",
-    "PM_Y",
-    "CPM_Y",
-    "FRD",
-    "SchwarzN",
-    "SchwarzW",
-    "SchwarzPW",
-]
+
+class Lattice(TypedDict):
+    # There are other fields but we don't care to capture them here
+    name: str
+    display_name: str
+    other_names: str
+    positions: list[float]
+    node_ids: list[int]
+
+
+lattice_url = "https://lightcycle-static.us-southeast-1.linodeobjects.com/lib/beam_lattice.json"
 
 
 def main() -> None:
-    parser = ArgumentParser(description="Compute metrics for surface lattices")
+    parser = ArgumentParser(description="Compute metrics for beam lattices")
     parser.add_argument("-t", "--token", type=str, help="access token")
     parser.add_argument("-p", "--project", type=str, help="project id", required=True)
 
@@ -52,8 +39,23 @@ def main() -> None:
 
     metafold = MetafoldClient(token, args.project)
 
-    for lattice_type in lattice_types:
-        print(f"Running evaluate_metrics ({lattice_type}) job...")
+    library = get_lattice_library()
+
+    for lattice_type in library:
+        lattice = library[lattice_type]
+        lattice_name = lattice["display_name"]
+
+        # Build arrays-of-arrays by iterating through flattened data in strides
+        nodes = [
+            lattice["positions"][i:i + 3]
+            for i in range(0, len(lattice["positions"]), 3)
+        ]
+        edges = [
+            lattice["node_ids"][i:i + 2]
+            for i in range(0, len(lattice["node_ids"]), 2)
+        ]
+
+        print(f"Running evaluate_metrics ({lattice_name}) job...")
         job = metafold.jobs.run("evaluate_metrics", {
             "graph": {
                 "operators": [
@@ -65,9 +67,12 @@ def main() -> None:
                         },
                     },
                     {
-                        "type": "SampleSurfaceLattice",
+                        "type": "SampleLattice",
                         "parameters": {
-                            "lattice_type": lattice_type,
+                            "lattice_data": {
+                                "nodes": nodes,
+                                "edges": edges,
+                            },
                             "scale": [1.0, 1.0, 1.0],
                         },
                     },
@@ -94,6 +99,11 @@ def main() -> None:
         })
         print(f"{lattice_type}:")
         pprint(job.meta)
+
+
+def get_lattice_library() -> dict[str, Lattice]:
+    r = requests.get(lattice_url)
+    return r.json()
 
 
 if __name__ == "__main__":

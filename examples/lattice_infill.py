@@ -15,6 +15,7 @@ import os
 
 Vec3: TypeAlias = [float, float, float]
 
+
 class Patch(TypedDict):
     offset: Vec3
     size: Vec3
@@ -95,11 +96,7 @@ def create_graph(volume_filename: str, patch: Patch) -> dict[str, Any]:
         "operators": [
             {
                 "type": "GenerateSamplePoints",
-                "parameters": {
-                    "offset": patch["offset"],
-                    "size": patch["size"],
-                    "resolution": patch["resolution"],
-                },
+                "parameters": patch,
             },
             {
                 "type": "LoadVolume",

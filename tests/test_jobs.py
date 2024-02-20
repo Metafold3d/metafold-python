@@ -114,7 +114,7 @@ class MockRequestHandler(BaseHTTPRequestHandler):
                     payload = deepcopy(new_job)
                     payload["state"] = "started"
                 else:
-                    self.send_response(HTTPStatus.OK)
+                    self.send_response(HTTPStatus.CREATED)
                     payload = deepcopy(new_job)
                     payload.update({
                         "state": "success",

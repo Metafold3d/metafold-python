@@ -4,7 +4,7 @@ Note the Metafold API applies rate limiting to job dispatches so running jobs in
 parallel will give limited performance improvements.
 
 Usage:
-    python examples/lattice_metrics_parallel.py -t <token> -p <project> -n <procs>
+    python examples/surface_lattice_metrics_parallel.py -t <token> -p <project> -n <procs>
 
 For more details on the available job types please refer to the Metafold REST API
 documentation.

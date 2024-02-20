@@ -87,7 +87,7 @@ class MockRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         match self.path:
             case "/projects/1/assets":
-                self.send_response(HTTPStatus.ACCEPTED)
+                self.send_response(HTTPStatus.CREATED)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self._assert_file()

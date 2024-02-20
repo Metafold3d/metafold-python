@@ -110,7 +110,7 @@ Most jobs produce at least one asset. You may access them from the returned
 
 For more complete examples, please refer to the `examples`_ in the source code repo.
 
-.. _API documentation: https://metafold3d.notion.site/Metafold-REST-API-059f01a419a74811a9d2dcafe75c871b#65833c70939d4d6490f2a4defe825d46
+.. _API documentation: https://docs.metafold3d.com/lightcycle-api#65833c70939d4d6490f2a4defe825d46
 .. _examples: https://github.com/Metafold3d/metafold-python/tree/master/examples
 
 .. toctree::

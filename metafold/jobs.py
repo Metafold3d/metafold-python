@@ -5,11 +5,11 @@ from metafold.assets import Asset
 from metafold.client import Client
 from metafold.exceptions import PollTimeout
 from requests import Response
-from typing import Any, Optional
+from typing import Any, Optional, Union
 import time
 
 
-def _assets(v: list[dict[str, Any] | Asset]) -> list[Asset]:
+def _assets(v: list[Union[dict[str, Any], Asset]]) -> list[Asset]:
     return [a if isinstance(a, Asset) else Asset(**a) for a in v]
 
 
@@ -76,7 +76,7 @@ class JobsEndpoint:
     def run(
         self, type: str, params: dict[str, Any],
         name: Optional[str] = None,
-        timeout: int | float = 120,
+        timeout: Union[int, float] = 120,
     ) -> Job:
         """Dispatch a new job and wait for a result.
 
@@ -111,7 +111,7 @@ class JobsEndpoint:
         r: Response = self._client.patch(url, data=payload)
         return Job(**r.json())
 
-    def _poll(self, url: str, timeout: int | float) -> Response:
+    def _poll(self, url: str, timeout: Union[int, float]) -> Response:
         t0 = time.monotonic()
         r = self._client.get(url)
         while r.status_code == 202:

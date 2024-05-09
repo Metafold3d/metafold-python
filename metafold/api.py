@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Union
 
 
-def asdatetime(s: str | datetime) -> datetime:
+def asdatetime(s: Union[str, datetime]) -> datetime:
     """Parse Metafold API datetime.
 
     Note datetime strings returned by the Metafold API are RFC 1123 formatted,

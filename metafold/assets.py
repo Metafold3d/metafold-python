@@ -4,7 +4,7 @@ from metafold.api import asdatetime, asdict
 from metafold.client import Client
 from os import PathLike
 from requests import Response
-from typing import IO, Optional
+from typing import IO, Optional, Union
 import requests
 
 
@@ -65,7 +65,7 @@ class AssetsEndpoint:
         r: Response = self._client.get(url)
         return Asset(**r.json())
 
-    def download_file(self, id: str, path: str | PathLike):
+    def download_file(self, id: str, path: Union[str, PathLike]):
         """Download an asset.
 
         Args:
@@ -79,7 +79,7 @@ class AssetsEndpoint:
             for chunk in r.iter_content(chunk_size=65536):  # 64 KiB
                 f.write(chunk)
 
-    def create(self, f: str | bytes | PathLike | IO[bytes]) -> Asset:
+    def create(self, f: Union[str, bytes, PathLike, IO[bytes]]) -> Asset:
         """Upload an asset.
 
         Args:
@@ -96,7 +96,7 @@ class AssetsEndpoint:
             fp.close()
         return Asset(**r.json())
 
-    def update(self, id: str, f: str | bytes | PathLike | IO[bytes]) -> Asset:
+    def update(self, id: str, f: Union[str, bytes, PathLike, IO[bytes]]) -> Asset:
         """Update an asset.
 
         Args:
@@ -124,7 +124,7 @@ class AssetsEndpoint:
         self._client.delete(url)
 
 
-def _open_file(f: str | bytes | PathLike | IO[bytes]) -> IO[bytes]:
-    if isinstance(f, str | bytes | PathLike):
+def _open_file(f: Union[str, bytes, PathLike, IO[bytes]]) -> IO[bytes]:
+    if isinstance(f, (str, bytes, PathLike)):
         return open(f, "rb")
     return f

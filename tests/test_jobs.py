@@ -89,69 +89,66 @@ class MockRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         params = parse_qs(u.query)
-        match u.path:
-            case "/projects/1/jobs":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                payload = job_list
-                if params.get("sort") == ["id:1"]:
-                    payload = sorted(job_list, key=lambda p: p["id"])
-                elif params.get("q") == ["name:foo"]:
-                    payload = [p for p in job_list if p["name"] == "foo"]
-                self.wfile.write(json.dumps(payload).encode())
-            case "/projects/1/jobs/1":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                payload = job_list[-1]
-                self.wfile.write(json.dumps(payload).encode())
-            case "/projects/1/jobs/1/status":
-                global poll_count
-                poll_count += 1
-                if poll_count < 3:
-                    self.send_response(HTTPStatus.ACCEPTED)
-                    payload = deepcopy(new_job)
-                    payload["state"] = "started"
-                else:
-                    self.send_response(HTTPStatus.CREATED)
-                    payload = deepcopy(new_job)
-                    payload.update({
-                        "state": "success",
-                        "assets": [asset_json],
-                    })
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps(payload).encode())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
-
-    def do_POST(self):
-        match self.path:
-            case "/projects/1/jobs":
+        if u.path == "/projects/1/jobs":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = job_list
+            if params.get("sort") == ["id:1"]:
+                payload = sorted(job_list, key=lambda p: p["id"])
+            elif params.get("q") == ["name:foo"]:
+                payload = [p for p in job_list if p["name"] == "foo"]
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/projects/1/jobs/1":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = job_list[-1]
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/projects/1/jobs/1/status":
+            global poll_count
+            poll_count += 1
+            if poll_count < 3:
                 self.send_response(HTTPStatus.ACCEPTED)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
+                payload = deepcopy(new_job)
+                payload["state"] = "started"
+            else:
+                self.send_response(HTTPStatus.CREATED)
                 payload = deepcopy(new_job)
                 payload.update({
-                    "state": "pending",
-                    "link": "http://localhost:8000/projects/1/jobs/1/status",
+                    "state": "success",
+                    "assets": [asset_json],
                 })
-                self.wfile.write(json.dumps(payload).encode())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(payload).encode())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_POST(self):
+        if self.path == "/projects/1/jobs":
+            self.send_response(HTTPStatus.ACCEPTED)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = deepcopy(new_job)
+            payload.update({
+                "state": "pending",
+                "link": "http://localhost:8000/projects/1/jobs/1/status",
+            })
+            self.wfile.write(json.dumps(payload).encode())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PATCH(self):
-        match self.path:
-            case "/projects/1/jobs/1":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                payload = deepcopy(job_list[-1])
-                payload["name"] = "baz"
-                self.wfile.write(json.dumps(payload).encode())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+        if self.path == "/projects/1/jobs/1":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = deepcopy(job_list[-1])
+            payload["name"] = "baz"
+            self.wfile.write(json.dumps(payload).encode())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
 
 @pytest.fixture(scope="module")

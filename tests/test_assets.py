@@ -57,62 +57,58 @@ class MockRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         params = parse_qs(u.query)
-        match u.path:
-            case "/projects/1/assets":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                payload = asset_list
-                if params.get("sort") == ["id:1"]:
-                    payload = sorted(asset_list, key=lambda p: p["id"])
-                elif params.get("q") == ["filename:f763df409e79eb1c.bin"]:
-                    payload = [p for p in asset_list if p["filename"] == "f763df409e79eb1c.bin"]
-                self.wfile.write(json.dumps(payload).encode())
-            case "/projects/1/assets/1":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                payload = deepcopy(asset_list[-1])
-                if params.get("download") == ["true"]:
-                    payload["link"] = "http://localhost:8000/download?filename=f763df409e79eb1c.bin"
-                self.wfile.write(json.dumps(payload).encode())
-            case "/download":
-                self.send_response(HTTPStatus.OK)
-                self.end_headers()
-                with open(test_file, "rb") as f:
-                    self.wfile.write(f.read())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+        if u.path == "/projects/1/assets":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = asset_list
+            if params.get("sort") == ["id:1"]:
+                payload = sorted(asset_list, key=lambda p: p["id"])
+            elif params.get("q") == ["filename:f763df409e79eb1c.bin"]:
+                payload = [p for p in asset_list if p["filename"] == "f763df409e79eb1c.bin"]
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/projects/1/assets/1":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = deepcopy(asset_list[-1])
+            if params.get("download") == ["true"]:
+                payload["link"] = "http://localhost:8000/download?filename=f763df409e79eb1c.bin"
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/download":
+            self.send_response(HTTPStatus.OK)
+            self.end_headers()
+            with open(test_file, "rb") as f:
+                self.wfile.write(f.read())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self):
-        match self.path:
-            case "/projects/1/assets":
-                self.send_response(HTTPStatus.CREATED)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self._assert_file()
-                self.wfile.write(json.dumps(new_asset).encode())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+        if self.path == "/projects/1/assets":
+            self.send_response(HTTPStatus.CREATED)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self._assert_file()
+            self.wfile.write(json.dumps(new_asset).encode())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PATCH(self):
-        match self.path:
-            case "/projects/1/assets/1":
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self._assert_file()
-                self.wfile.write(json.dumps(new_asset).encode())
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+        if self.path == "/projects/1/assets/1":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self._assert_file()
+            self.wfile.write(json.dumps(new_asset).encode())
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self):
-        match self.path:
-            case "/projects/1/assets/1":
-                self.send_response(HTTPStatus.OK)
-                self.end_headers()
-            case _:
-                self.send_error(HTTPStatus.NOT_FOUND)
+        if self.path == "/projects/1/assets/1":
+            self.send_response(HTTPStatus.OK)
+            self.end_headers()
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
 
     def _assert_file(self):
         length = self.headers.get("Content-Length")

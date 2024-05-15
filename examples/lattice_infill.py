@@ -12,6 +12,7 @@ from metafold import MetafoldClient
 from typing import Any, TypeAlias, TypedDict
 import argparse
 import os
+import sys
 
 Vec3: TypeAlias = [float, float, float]
 
@@ -54,10 +55,15 @@ def main() -> None:
         "max_resolution": 256,
     })
 
-    # "sample_triangle_mesh" only generates a single asset. The order of assets
-    # generated from a job should be consistent with the API documentation, but you may
-    # also use the filename extension to find the generated asset of interest.
-    volume_filename = sample_mesh_job.assets[0].filename
+    # "sample_triangle_mesh" generates multiple assets. We recommend using the filename
+    # extension to find the generated asset of interest.
+    for asset in sample_mesh_job.assets:
+        if asset.filename.endswith(".bin"):
+            volume_filename = asset.filename
+            break
+    else:
+        print("Failed to generate mesh volume", file=sys.stderr)
+        sys.exit(1)
 
     # Some jobs have JSON metadata which is automatically decoded into a dictionary
     patch = sample_mesh_job.meta["patch"]

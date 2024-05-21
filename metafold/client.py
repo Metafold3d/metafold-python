@@ -29,10 +29,10 @@ class Client:
         url = urljoin(self._base_url, url)
         r: Response = request(url, *args, **kwargs)
         if not r.ok:
-            r: dict[str, Any] = r.json()
+            body: dict[str, Any] = r.json()
             # Error responses aren't entirely consistent in the Metafold API,
             # for now we check for a handful of possible fields.
-            reason = r.get("errors") or r.get("msg") or r.get("description")
+            reason = body.get("errors") or body.get("msg") or body.get("description")
             raise HTTPError(f"HTTP error occurred: {reason or r.reason}")
         return r
 

@@ -1,7 +1,16 @@
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from metafold import MetafoldClient
 import pytest
 import threading
+
+
+class MockRequestHandler(BaseHTTPRequestHandler):
+    pass
+
+
+@pytest.fixture(scope="module")
+def request_handler():
+    return MockRequestHandler
 
 
 @pytest.fixture(scope="module", autouse=True)

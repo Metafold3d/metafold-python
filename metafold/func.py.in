@@ -1,0 +1,154 @@
+# ruff: noqa: F401
+"""
+This file was automatically generated from the source file: func.py.in.
+Any edits should be made to the template file before re-running the codegen.
+"""
+from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING
+from typing import cast
+import sys
+if sys.version_info >= (3, 10):
+    from typing import TypeAlias
+else:
+    from typing_extensions import TypeAlias
+
+from .func_types import (
+    Evaluator,
+    Func,
+    FuncType,
+    POINT_SOURCE_VAR_TYPE,
+    Params,
+    Result,
+    TypedFunc,
+    TypedResult,
+
+    # Parameter types
+    Vec2i,
+    Vec2f,
+    Vec3i,
+    Vec3f,
+    Vec4i,
+    Vec4f,
+    Mat2f,
+    Mat3f,
+    Mat4f,
+    UnitCell,
+
+    # Asset types
+    VolumeAsset,
+    TriangleMeshAsset,
+    CustomShapeAsset,
+    ParametrizationAsset,
+    LineNetworkAsset,
+    LineNetworkBvhAsset,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    F = TypeVar("F", bound=Callable)
+    def cache(f: F) -> F: ...
+else:
+    from functools import cache
+
+
+@cache
+def PointSource(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    return cast(TypedResult[Literal[FuncType.VEC3F]], eval_(POINT_SOURCE_VAR_TYPE))
+
+
+{{- range $type, $op := . }}
+{{- range $name, $param := $op.Params }}
+{{- if eq $param.Type.String "Enum" }}
+
+
+{{ $type }}_Enum_{{ $name }}: TypeAlias = Literal[
+{{- range $i, $var := $param.EnumVars -}}
+"{{ $var }}"
+{{- if lt $i (sub (len $param.EnumVars) 1) }}, {{ end }}
+{{- end -}}
+]
+{{- end }}
+{{- end }}
+
+
+class {{ $type }}_Parameters(TypedDict, total=False):
+{{- range $name, $param := $op.Params }}
+    {{ $name }}: {{ parameterType $type $name $param }}
+{{- end }}
+
+
+def {{ $type }}(
+{{- range $i, $input := $op.Inputs }}
+    {{ lower .Name }}
+{{- if eq $input.Type.String "Any" -}}
+: Func,
+{{- else -}}
+: TypedFunc[Literal[FuncType.{{ $input.Type.String | upper }}]],
+{{- end }}
+{{- end }}
+{{- range $name, $asset := $op.Assets }}
+    {{ $name }}: {{ $asset.Type }}Asset,
+{{- end }}
+    parameters: Optional[{{ $type }}_Parameters] = None,
+) -> {{ if eq $op.Output.String "Any" -}}
+Func:
+{{- else -}}
+TypedFunc[Literal[FuncType.{{ $op.Output.String | upper }}]]:
+{{- end }}
+    @cache
+    def f(eval_: Evaluator) -> {{ if eq $op.Output.String "Any" -}}
+Result:
+{{- else -}}
+TypedResult[Literal[FuncType.{{ $op.Output.String | upper }}]]:
+{{- end }}
+        r = eval_(
+            "{{ $type }}",
+{{- if gt (len $op.Inputs) 0 }}
+            inputs={
+{{- range $op.Inputs }}
+                "{{ .Name }}": {{ lower .Name }}(eval_),
+{{- end }}
+            },
+{{- end }}
+{{- if gt (len $op.Assets) 0 }}
+            assets={
+{{- range $name, $_ := $op.Assets }}
+                "{{ $name }}": {{ $name }},
+{{- end }}
+            },
+{{- end }}
+            # https://github.com/python/mypy/issues/4976#issuecomment-460971843
+            parameters=cast(Optional[Params], parameters),
+        )
+{{- if eq $op.Output.String "Any" }}
+        return r
+{{- else }}
+        return cast(TypedResult[Literal[FuncType.{{ $op.Output.String | upper }}]], r)
+{{- end }}
+    return f
+{{- end }}
+
+{{- range .SampleBox.Params.shape_type.EnumVars }}
+
+
+def {{ . }}Primitive(
+    points: TypedFunc[Literal[FuncType.VEC3F]],
+    parameters: Optional[SampleBox_Parameters] = None,
+  ) -> TypedFunc[Literal[FuncType.FLOAT]]:
+    parameters = parameters or {}
+    parameters["shape_type"] = "{{ . }}"
+    return SampleBox(points, parameters=parameters)
+{{- end }}
+
+{{- range .CSG.Params.operation.EnumVars }}
+
+
+def CSG{{ . }}(
+    a: TypedFunc[Literal[FuncType.FLOAT]],
+    b: TypedFunc[Literal[FuncType.FLOAT]],
+    smoothing: Optional[float] = None,
+) -> TypedFunc[Literal[FuncType.FLOAT]]:
+    parameters: CSG_Parameters = {"operation": "{{ . }}"}
+    if smoothing is not None:
+        parameters["smoothing"] = smoothing
+    return CSG(a, b, parameters=parameters)
+{{- end }}

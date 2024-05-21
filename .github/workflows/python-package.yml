@@ -21,9 +21,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-          python -m pip install requests-toolbelt ruff pytest
+          python -m pip install requests-toolbelt ruff mypy typing_extensions types-requests pytest numpy
       - name: Lint with Ruff
         run: ruff --output-format=github .
+      - run: |
+          mypy metafold
+          mypy --check-untyped-defs tests/test_func.py
       - name: Test with pytest
         run: pytest --junitxml=junit/test-results-${{ matrix.python-version }}.xml
       - name: Upload pytest test results

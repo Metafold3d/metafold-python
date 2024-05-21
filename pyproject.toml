@@ -41,7 +41,16 @@ docs = [
     "sphinx>=7.2",
     "sphinx_rtd_theme>=2.0",
 ]
+lint = [
+    "mypy>=1.10",
+    "types-requests>=2.31",
+]
 test = [
+    "numpy>=1.26",
     "pytest>=7.3",
     "requests-toolbelt>=1.0",
+]
+networkx = [
+    "networkx>=3.2",
+    "types-networkx>=3.2",
 ]

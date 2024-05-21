@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from enum import Enum
 from typing import (
     Any,
@@ -126,6 +127,9 @@ class Evaluator(Protocol):
         ...
 
 
+POINT_SOURCE_VAR_TYPE = "_PointSource"
+
+
 class Func(Protocol):
     def __call__(self, eval_: Evaluator) -> Result: ...
 
@@ -133,7 +137,32 @@ class Func(Protocol):
 class TypedFunc(Func, Protocol[T]): ...
 
 
-POINT_SOURCE_VAR_TYPE = "_PointSource"
+class BaseEvaluator(Evaluator):
+    def __init__(self, source: Optional[TypedFunc[Literal[FuncType.VEC3F]]] = None):
+        self._source = source
+
+    def __call__(
+        self,
+        type_: str,
+        inputs: Optional[Inputs] = None,
+        assets: Optional[Assets] = None,
+        parameters: Optional[Params] = None,
+    ) -> Result:
+        if type_ == POINT_SOURCE_VAR_TYPE:
+            if not self._source:
+                raise Exception("Expected valid point source")
+            return self._source(self)
+        return self._eval(type_, inputs, assets, parameters)
+
+    @abstractmethod
+    def _eval(
+        self,
+        type_: str,
+        inputs: Optional[Inputs] = None,
+        assets: Optional[Assets] = None,
+        parameters: Optional[Params] = None,
+    ) -> Result:
+        ...
 
 
 class OperatorParams(TypedDict, total=False):
@@ -159,33 +188,28 @@ class IndexResult(TypedResult):
         self.index = index
 
 
-class JSONEvaluator(Evaluator):
+class JSONEvaluator(BaseEvaluator):
     def __init__(self, source: Optional[TypedFunc[Literal[FuncType.VEC3F]]] = None):
-        self._source = source
+        super().__init__(source=source)
         self._operators: list[Operator] = []
         self._edges: list[Edge] = []
 
-    def __call__(
+    def json(self):
+        return {
+            "operators": self._operators,
+            "edges": self._edges,
+        }
+
+    def _eval(
         self,
         type_: str,
         inputs: Optional[Inputs] = None,
         assets: Optional[Assets] = None,
         parameters: Optional[Params] = None,
     ) -> IndexResult:
-        if type_ == POINT_SOURCE_VAR_TYPE:
-            if not self._source:
-                raise Exception("Expected valid point source")
-            return cast(IndexResult, self._source(self))
+        operator: Operator = self._make_operator(
+            type_, assets=assets, parameters=parameters)
         target = len(self._operators)
-        operator: Operator = {"type": type_}
-        if parameters:
-            for k, v in parameters.items():
-                if isinstance(v, np.ndarray):
-                    parameters[k] = v.tolist()
-            operator["parameters"] = parameters
-        if assets:
-            parameters = parameters or {}
-            parameters.update(assets)
         self._operators.append(operator)
         if inputs:
             for name, result in inputs.items():
@@ -195,8 +219,19 @@ class JSONEvaluator(Evaluator):
                 })
         return IndexResult(target)
 
-    def json(self):
-        return {
-            "operators": self._operators,
-            "edges": self._edges,
-        }
+    def _make_operator(
+        self,
+        type_: str,
+        assets: Optional[Assets] = None,
+        parameters: Optional[Params] = None,
+    ) -> Operator:
+        operator: Operator = {"type": type_}
+        if parameters:
+            for k, v in parameters.items():
+                if _USE_NUMPY and isinstance(v, np.ndarray):
+                    parameters[k] = v.tolist()
+            operator["parameters"] = parameters
+        if assets:
+            parameters = parameters or {}
+            parameters.update(assets)
+        return operator

@@ -54,3 +54,6 @@ networkx = [
     "networkx>=3.2",
     "types-networkx>=3.2",
 ]
+
+[tool.setuptools]
+packages = ["metafold"]

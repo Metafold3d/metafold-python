@@ -64,8 +64,8 @@ Mat4f: TypeAlias = Union[
 
 
 class UnitCell(TypedDict):
-    nodes: list[Vec3f]
-    edges: list[Vec2i]
+    nodes: Union[list[Vec3f], "np.ndarray"]
+    edges: Union[list[Vec2i], "np.ndarray"]
 
 
 class Asset(TypedDict):
@@ -226,12 +226,12 @@ class JSONEvaluator(BaseEvaluator):
         parameters: Optional[Params] = None,
     ) -> Operator:
         operator: Operator = {"type": type_}
+        if assets:
+            parameters = parameters or {}
+            parameters.update(assets)
         if parameters:
             for k, v in parameters.items():
                 if _USE_NUMPY and isinstance(v, np.ndarray):
                     parameters[k] = v.tolist()
             operator["parameters"] = parameters
-        if assets:
-            parameters = parameters or {}
-            parameters.update(assets)
         return operator

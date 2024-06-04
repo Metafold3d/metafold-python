@@ -3,7 +3,7 @@
 This file was automatically generated from the source file: func.py.in.
 Any edits should be made to the template file before re-running the codegen.
 """
-from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING
+from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING, Union
 from typing import cast
 import sys
 if sys.version_info >= (3, 10):
@@ -11,10 +11,17 @@ if sys.version_info >= (3, 10):
 else:
     from typing_extensions import TypeAlias
 
+try:
+    import numpy as np
+except ImportError:
+    pass
+
 from .func_types import (
     Evaluator,
     Func,
     FuncType,
+    Assets,
+    Inputs,
     POINT_SOURCE_VAR_TYPE,
     Params,
     Result,
@@ -72,13 +79,26 @@ def PointSource(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
 
 class {{ $type }}_Parameters(TypedDict, total=False):
 {{- range $name, $param := $op.Params }}
-    {{ $name }}: {{ parameterType $type $name $param }}
+{{- $paramType := parameterType $type $name $param }}
+    {{ $name }}: {{ if $param.IsArray -}}
+Union[list[{{ $paramType }}], "np.ndarray"]
+{{- else -}}
+{{ $paramType }}
+{{- end }}
 {{- end }}
 
 
-def {{ $type }}(
+class {{ $type }}(
+{{- if eq $op.Output.String "Any" -}}
+Func
+{{- else -}}
+TypedFunc[Literal[FuncType.{{ $op.Output.String | upper }}]]
+{{- end -}}
+):
+    def __init__(
+        self,
 {{- range $i, $input := $op.Inputs }}
-    {{ lower .Name }}
+        {{ lower .Name }}
 {{- if eq $input.Type.String "Any" -}}
 : Func,
 {{- else -}}
@@ -86,45 +106,47 @@ def {{ $type }}(
 {{- end }}
 {{- end }}
 {{- range $name, $asset := $op.Assets }}
-    {{ $name }}: {{ $asset.Type }}Asset,
+        {{ $name }}: {{ $asset.Type }}Asset,
 {{- end }}
-    parameters: Optional[{{ $type }}_Parameters] = None,
-) -> {{ if eq $op.Output.String "Any" -}}
-Func:
-{{- else -}}
-TypedFunc[Literal[FuncType.{{ $op.Output.String | upper }}]]:
+        parameters: Optional[{{ $type }}_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {{ if eq (len $op.Inputs) 0 -}} None {{- else -}} {
+{{- range $op.Inputs }}
+            "{{ .Name }}": {{ lower .Name }},
 {{- end }}
+        }
+{{- end }}
+        self.assets: Optional[Assets]
+        self.assets = {{ if eq (len $op.Assets) 0 -}} None {{- else -}} {
+{{- range $name, $_ := $op.Assets }}
+            "{{ $name }}": {{ $name }},
+{{- end }}
+        }
+{{- end }}
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> {{ if eq $op.Output.String "Any" -}}
+    def __call__(self, eval_: Evaluator) -> {{ if eq $op.Output.String "Any" -}}
 Result:
 {{- else -}}
 TypedResult[Literal[FuncType.{{ $op.Output.String | upper }}]]:
 {{- end }}
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "{{ $type }}",
-{{- if gt (len $op.Inputs) 0 }}
-            inputs={
-{{- range $op.Inputs }}
-                "{{ .Name }}": {{ lower .Name }}(eval_),
-{{- end }}
-            },
-{{- end }}
-{{- if gt (len $op.Assets) 0 }}
-            assets={
-{{- range $name, $_ := $op.Assets }}
-                "{{ $name }}": {{ $name }},
-{{- end }}
-            },
-{{- end }}
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
 {{- if eq $op.Output.String "Any" }}
         return r
 {{- else }}
         return cast(TypedResult[Literal[FuncType.{{ $op.Output.String | upper }}]], r)
 {{- end }}
-    return f
 {{- end }}
 
 {{- range .SampleBox.Params.shape_type.EnumVars }}

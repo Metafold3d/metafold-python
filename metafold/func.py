@@ -3,7 +3,7 @@
 This file was automatically generated from the source file: func.py.in.
 Any edits should be made to the template file before re-running the codegen.
 """
-from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING
+from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING, Union
 from typing import cast
 import sys
 if sys.version_info >= (3, 10):
@@ -11,10 +11,17 @@ if sys.version_info >= (3, 10):
 else:
     from typing_extensions import TypeAlias
 
+try:
+    import numpy as np
+except ImportError:
+    pass
+
 from .func_types import (
     Evaluator,
     Func,
     FuncType,
+    Assets,
+    Inputs,
     POINT_SOURCE_VAR_TYPE,
     Params,
     Result,
@@ -63,24 +70,35 @@ class CSG_Parameters(TypedDict, total=False):
     smoothing: float
 
 
-def CSG(
-    a: TypedFunc[Literal[FuncType.FLOAT]],
-    b: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[CSG_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class CSG(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        a: TypedFunc[Literal[FuncType.FLOAT]],
+        b: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[CSG_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "A": a,
+            "B": b,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "CSG",
-            inputs={
-                "A": a(eval_),
-                "B": b(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class ComputeNormals_Parameters(TypedDict, total=False):
@@ -89,24 +107,35 @@ class ComputeNormals_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def ComputeNormals(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    volume: Func,
-    parameters: Optional[ComputeNormals_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class ComputeNormals(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        volume: Func,
+        parameters: Optional[ComputeNormals_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+            "Volume": volume,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "ComputeNormals",
-            inputs={
-                "Points": points(eval_),
-                "Volume": volume(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 class GenerateSamplePoints_Parameters(TypedDict, total=False):
@@ -116,18 +145,30 @@ class GenerateSamplePoints_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def GenerateSamplePoints(
-    parameters: Optional[GenerateSamplePoints_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class GenerateSamplePoints(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        parameters: Optional[GenerateSamplePoints_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = None
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "GenerateSamplePoints",
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 GradeCellSize_Enum_shape_type: TypeAlias = Literal["Box", "Cylinder", "Ellipsoid", "Plane"]
@@ -144,22 +185,33 @@ class GradeCellSize_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def GradeCellSize(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[GradeCellSize_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class GradeCellSize(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[GradeCellSize_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "GradeCellSize",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 class InterpolateBoundaryCoords_Parameters(TypedDict, total=False):
@@ -167,28 +219,38 @@ class InterpolateBoundaryCoords_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def InterpolateBoundaryCoords(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    boundary_data: ParametrizationAsset,
-    mesh_data: TriangleMeshAsset,
-    parameters: Optional[InterpolateBoundaryCoords_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class InterpolateBoundaryCoords(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        boundary_data: ParametrizationAsset,
+        mesh_data: TriangleMeshAsset,
+        parameters: Optional[InterpolateBoundaryCoords_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = {
+            "boundary_data": boundary_data,
+            "mesh_data": mesh_data,
+        }
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "InterpolateBoundaryCoords",
-            inputs={
-                "Points": points(eval_),
-            },
-            assets={
-                "boundary_data": boundary_data,
-                "mesh_data": mesh_data,
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 class LinearFilter_Parameters(TypedDict, total=False):
@@ -196,42 +258,65 @@ class LinearFilter_Parameters(TypedDict, total=False):
     scale_b: float
 
 
-def LinearFilter(
-    inputa: TypedFunc[Literal[FuncType.FLOAT]],
-    inputb: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[LinearFilter_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class LinearFilter(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        inputa: TypedFunc[Literal[FuncType.FLOAT]],
+        inputb: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[LinearFilter_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "InputA": inputa,
+            "InputB": inputb,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "LinearFilter",
-            inputs={
-                "InputA": inputa(eval_),
-                "InputB": inputb(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class LoadSamplePoints_Parameters(TypedDict, total=False):
-    points: Vec3f
+    points: Union[list[Vec3f], "np.ndarray"]
 
 
-def LoadSamplePoints(
-    parameters: Optional[LoadSamplePoints_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class LoadSamplePoints(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        parameters: Optional[LoadSamplePoints_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = None
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "LoadSamplePoints",
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 LoadVolume_Enum_component_type: TypeAlias = Literal["Byte", "Float", "Integer", "None", "Vec2f", "Vec2i", "Vec3f", "Vec3i", "Vec4f", "Vec4i"]
@@ -242,22 +327,33 @@ class LoadVolume_Parameters(TypedDict, total=False):
     resolution: Vec3i
 
 
-def LoadVolume(
-    volume_data: VolumeAsset,
-    parameters: Optional[LoadVolume_Parameters] = None,
-) -> Func:
+class LoadVolume(Func):
+    def __init__(
+        self,
+        volume_data: VolumeAsset,
+        parameters: Optional[LoadVolume_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = None
+        self.assets: Optional[Assets]
+        self.assets = {
+            "volume_data": volume_data,
+        }
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> Result:
+    def __call__(self, eval_: Evaluator) -> Result:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "LoadVolume",
-            assets={
-                "volume_data": volume_data,
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return r
-    return f
 
 
 MapTexturePrimitive_Enum_shape_type: TypeAlias = Literal["Box", "Cylinder", "Ellipsoid", "Plane"]
@@ -271,24 +367,35 @@ class MapTexturePrimitive_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def MapTexturePrimitive(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    image: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[MapTexturePrimitive_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class MapTexturePrimitive(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        image: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[MapTexturePrimitive_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+            "Image": image,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "MapTexturePrimitive",
-            inputs={
-                "Points": points(eval_),
-                "Image": image(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 class Redistance_Parameters(TypedDict, total=False):
@@ -296,22 +403,33 @@ class Redistance_Parameters(TypedDict, total=False):
     pre_offset: float
 
 
-def Redistance(
-    samples: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[Redistance_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class Redistance(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        samples: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[Redistance_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Samples": samples,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "Redistance",
-            inputs={
-                "Samples": samples(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 SampleBeam_Enum_node_type: TypeAlias = Literal["None", "Sphere"]
@@ -329,28 +447,38 @@ class SampleBeam_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleBeam(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    bvh_data: LineNetworkBvhAsset,
-    network_data: LineNetworkAsset,
-    parameters: Optional[SampleBeam_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleBeam(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        bvh_data: LineNetworkBvhAsset,
+        network_data: LineNetworkAsset,
+        parameters: Optional[SampleBeam_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = {
+            "bvh_data": bvh_data,
+            "network_data": network_data,
+        }
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleBeam",
-            inputs={
-                "Points": points(eval_),
-            },
-            assets={
-                "bvh_data": bvh_data,
-                "network_data": network_data,
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 SampleBox_Enum_shape_type: TypeAlias = Literal["Box", "BoxFrame", "CappedCone", "Capsule", "Cylinder", "Ellipsoid", "Link", "Plane", "Torus"]
@@ -363,48 +491,69 @@ class SampleBox_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleBox(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[SampleBox_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleBox(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[SampleBox_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleBox",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class SampleCustomShape_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleCustomShape(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    shader_data: CustomShapeAsset,
-    parameters: Optional[SampleCustomShape_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleCustomShape(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        shader_data: CustomShapeAsset,
+        parameters: Optional[SampleCustomShape_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = {
+            "shader_data": shader_data,
+        }
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleCustomShape",
-            inputs={
-                "Points": points(eval_),
-            },
-            assets={
-                "shader_data": shader_data,
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 SampleLattice_Enum_node_type: TypeAlias = Literal["None", "Sphere"]
@@ -428,22 +577,33 @@ class SampleLattice_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleLattice(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[SampleLattice_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleLattice(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[SampleLattice_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleLattice",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 SampleSurfaceLattice_Enum_lattice_type: TypeAlias = Literal["CD", "CI2Y", "CP", "CPM_Y", "CS", "CY", "C_Y", "D", "F", "FRD", "Gyroid", "I2Y", "IWP", "None", "P", "PM_Y", "S", "SD1", "Schwarz", "SchwarzD", "SchwarzN", "SchwarzPW", "SchwarzW", "W", "Y"]
@@ -460,22 +620,33 @@ class SampleSurfaceLattice_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleSurfaceLattice(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[SampleSurfaceLattice_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleSurfaceLattice(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[SampleSurfaceLattice_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleSurfaceLattice",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class SampleTriangleMesh_Parameters(TypedDict, total=False):
@@ -483,26 +654,36 @@ class SampleTriangleMesh_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleTriangleMesh(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    mesh_data: TriangleMeshAsset,
-    parameters: Optional[SampleTriangleMesh_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class SampleTriangleMesh(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        mesh_data: TriangleMeshAsset,
+        parameters: Optional[SampleTriangleMesh_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = {
+            "mesh_data": mesh_data,
+        }
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleTriangleMesh",
-            inputs={
-                "Points": points(eval_),
-            },
-            assets={
-                "mesh_data": mesh_data,
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class SampleVolume_Parameters(TypedDict, total=False):
@@ -511,24 +692,35 @@ class SampleVolume_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def SampleVolume(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    volume: Func,
-    parameters: Optional[SampleVolume_Parameters] = None,
-) -> Func:
+class SampleVolume(Func):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        volume: Func,
+        parameters: Optional[SampleVolume_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+            "Volume": volume,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> Result:
+    def __call__(self, eval_: Evaluator) -> Result:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleVolume",
-            inputs={
-                "Points": points(eval_),
-                "Volume": volume(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return r
-    return f
 
 
 class Shell_Parameters(TypedDict, total=False):
@@ -536,44 +728,66 @@ class Shell_Parameters(TypedDict, total=False):
     thickness: float
 
 
-def Shell(
-    samples: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[Shell_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.FLOAT]]:
+class Shell(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        samples: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[Shell_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Samples": samples,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "Shell",
-            inputs={
-                "Samples": samples(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
-    return f
 
 
 class Threshold_Parameters(TypedDict, total=False):
     width: float
 
 
-def Threshold(
-    samples: TypedFunc[Literal[FuncType.FLOAT]],
-    parameters: Optional[Threshold_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.BYTE]]:
+class Threshold(TypedFunc[Literal[FuncType.BYTE]]):
+    def __init__(
+        self,
+        samples: TypedFunc[Literal[FuncType.FLOAT]],
+        parameters: Optional[Threshold_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Samples": samples,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.BYTE]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.BYTE]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "Threshold",
-            inputs={
-                "Samples": samples(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.BYTE]], r)
-    return f
 
 
 class TransformCylindricalCoords_Parameters(TypedDict, total=False):
@@ -581,70 +795,101 @@ class TransformCylindricalCoords_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def TransformCylindricalCoords(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[TransformCylindricalCoords_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class TransformCylindricalCoords(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[TransformCylindricalCoords_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "TransformCylindricalCoords",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
-
-
-TransformMirrorCoords_Enum_normal: TypeAlias = Literal["X", "Y", "Z"]
 
 
 class TransformMirrorCoords_Parameters(TypedDict, total=False):
-    normal: TransformMirrorCoords_Enum_normal
+    mirror_normal: Vec3f
+    mirror_point: Vec3f
     xform: Mat4f
 
 
-def TransformMirrorCoords(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[TransformMirrorCoords_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class TransformMirrorCoords(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[TransformMirrorCoords_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "TransformMirrorCoords",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 class TransformSphericalCoords_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def TransformSphericalCoords(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[TransformSphericalCoords_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class TransformSphericalCoords(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[TransformSphericalCoords_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "TransformSphericalCoords",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 TransformTwistCoords_Enum_axis: TypeAlias = Literal["X", "Y", "Z"]
@@ -656,22 +901,33 @@ class TransformTwistCoords_Parameters(TypedDict, total=False):
     xform: Mat4f
 
 
-def TransformTwistCoords(
-    points: TypedFunc[Literal[FuncType.VEC3F]],
-    parameters: Optional[TransformTwistCoords_Parameters] = None,
-) -> TypedFunc[Literal[FuncType.VEC3F]]:
+class TransformTwistCoords(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[TransformTwistCoords_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
     @cache
-    def f(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "TransformTwistCoords",
-            inputs={
-                "Points": points(eval_),
-            },
+            inputs=inputs,
+            assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843
-            parameters=cast(Optional[Params], parameters),
+            parameters=cast(Optional[Params], self.parameters),
         )
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
-    return f
 
 
 def BoxPrimitive(

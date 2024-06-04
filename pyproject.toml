@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metafold"
-version = "0.2.0"
+version = "0.2.1"
 authors = [
     {name = "Metafold 3D", email = "info@metafold3d.com"},
 ]
 dependencies = [
-    "attrs>=23.2",
-    "requests>=2.31",
+    "attrs~=23.2",
+    "requests~=2.31",
 ]
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -38,21 +38,21 @@ Issues = "https://github.com/Metafold3d/metafold-python/issues"
 
 [project.optional-dependencies]
 docs = [
-    "sphinx>=7.2",
-    "sphinx_rtd_theme>=2.0",
+    "sphinx~=7.2",
+    "sphinx_rtd_theme~=2.0",
 ]
 lint = [
-    "mypy>=1.10",
-    "types-requests>=2.31",
+    "mypy~=1.10",
+    "types-requests~=2.31",
 ]
 test = [
-    "numpy>=1.26",
-    "pytest>=7.3",
-    "requests-toolbelt>=1.0",
+    "numpy~=1.26",
+    "pytest~=7.3",
+    "requests-toolbelt~=1.0",
 ]
 networkx = [
-    "networkx>=3.2",
-    "types-networkx>=3.2",
+    "networkx~=3.2",
+    "types-networkx~=3.2",
 ]
 
 [tool.setuptools]

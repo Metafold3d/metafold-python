@@ -43,7 +43,12 @@ class JobsEndpoint:
     def __init__(self, client: Client) -> None:
         self._client = client
 
-    def list(self, sort: Optional[str] = None, q: Optional[str] = None) -> list[Job]:
+    def list(
+        self,
+        sort: Optional[str] = None,
+        q: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> list[Job]:
         """List jobs.
 
         Args:
@@ -51,25 +56,29 @@ class JobsEndpoint:
                 Supported sorting fields are: "id", "name", or "created".
             q: Query string. For details on syntax see the Metafold API docs.
                 Supported search fields are: "id", "name", "type", and "state".
+            project_id: Job project ID.
 
         Returns:
             List of job resources.
         """
-        url = f"/projects/{self._client.project_id}/jobs"
+        project_id = self._client.project_id(project_id)
+        url = f"/projects/{project_id}/jobs"
         payload = asdict(sort=sort, q=q)
         r: Response = self._client.get(url, params=payload)
         return [Job(**j) for j in r.json()]
 
-    def get(self, id: str) -> Job:
+    def get(self, job_id: str, project_id: Optional[str] = None) -> Job:
         """Get a job.
 
         Args:
-            id: ID of job to get.
+            job_id: ID of job to get.
+            project_id: Job project ID.
 
         Returns:
             Job resource.
         """
-        url = f"/projects/{self._client.project_id}/jobs/{id}"
+        project_id = self._client.project_id(project_id)
+        url = f"/projects/{project_id}/jobs/{job_id}"
         r: Response = self._client.get(url)
         return Job(**r.json())
 
@@ -77,6 +86,7 @@ class JobsEndpoint:
         self, type: str, params: dict[str, Any],
         name: Optional[str] = None,
         timeout: Union[int, float] = 120,
+        project_id: Optional[str] = None,
     ) -> Job:
         """Dispatch a new job and wait for a result.
 
@@ -87,26 +97,34 @@ class JobsEndpoint:
             params: Job parameters.
             name: Optional job name.
             timeout: Time in seconds to wait for a result.
+            project_id: Job project ID.
 
         Returns:
             Completed job resource.
         """
+        project_id = self._client.project_id(project_id)
         payload = asdict(type=type, parameters=params, name=name)
-        r: Response = self._client.post(f"/projects/{self._client.project_id}/jobs", json=payload)
+        r: Response = self._client.post(f"/projects/{project_id}/jobs", json=payload)
         r = self._poll(r.json()["link"], timeout)
         return Job(**r.json())
 
-    def update(self, id: str, name: Optional[str] = None) -> Job:
+    def update(
+        self, job_id: str,
+        name: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Job:
         """Update a job.
 
         Args:
-            id: ID of job to update.
+            job_id: ID of job to update.
             name: New job name. The existing name remains unchanged if None.
+            project_id: Job project ID.
 
         Returns:
             Updated job resource.
         """
-        url = f"/projects/{self._client.project_id}/jobs/{id}"
+        project_id = self._client.project_id(project_id)
+        url = f"/projects/{project_id}/jobs/{job_id}"
         payload = asdict(name=name)
         r: Response = self._client.patch(url, data=payload)
         return Job(**r.json())

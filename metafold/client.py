@@ -1,5 +1,5 @@
 from requests import HTTPError, Response, Session
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from urllib.parse import urljoin
 import platform
 
@@ -7,9 +7,11 @@ import platform
 class Client:
     """Base client."""
 
-    def __init__(self, access_token: str, project_id: str, base_url: str) -> None:
-        # TODO(ryan): Validate project id
-        self._project_id = project_id
+    def __init__(
+        self, access_token: str, base_url: str,
+        project_id: Optional[str] = None,
+    ) -> None:
+        self._default_project = project_id
         self._base_url = base_url
         self._session = Session()
         self._session.headers.update({
@@ -18,9 +20,13 @@ class Client:
             "User-Agent": f"Python/{platform.python_version()}",
         })
 
-    @property
-    def project_id(self) -> str:
-        return self._project_id
+    def project_id(self, id: Optional[str] = None) -> str:
+        id = id or self._default_project
+        if not id:
+            raise ValueError(
+                "Project ID required, set a default ID when initializing the client"
+            )
+        return id
 
     def _request(
         self, request: Callable[..., Response], url: str,

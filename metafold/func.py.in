@@ -45,6 +45,7 @@ from .func_types import (
     ParametrizationAsset,
     LineNetworkAsset,
     LineNetworkBvhAsset,
+    MeshBvhAsset,
 )
 
 if TYPE_CHECKING:

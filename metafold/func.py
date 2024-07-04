@@ -45,6 +45,7 @@ from .func_types import (
     ParametrizationAsset,
     LineNetworkAsset,
     LineNetworkBvhAsset,
+    MeshBvhAsset,
 )
 
 if TYPE_CHECKING:
@@ -676,6 +677,44 @@ class SampleTriangleMesh(TypedFunc[Literal[FuncType.FLOAT]]):
             inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
         r = eval_(
             "SampleTriangleMesh",
+            inputs=inputs,
+            assets=self.assets,
+            # https://github.com/python/mypy/issues/4976#issuecomment-460971843
+            parameters=cast(Optional[Params], self.parameters),
+        )
+        return cast(TypedResult[Literal[FuncType.FLOAT]], r)
+
+
+class SampleTriangleMeshBvh_Parameters(TypedDict, total=False):
+    xform: Mat4f
+
+
+class SampleTriangleMeshBvh(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        bvh_data: MeshBvhAsset,
+        mesh_data: TriangleMeshAsset,
+        parameters: Optional[SampleTriangleMeshBvh_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = {
+            "bvh_data": bvh_data,
+            "mesh_data": mesh_data,
+        }
+        self.parameters = parameters
+
+    @cache
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
+        r = eval_(
+            "SampleTriangleMeshBvh",
             inputs=inputs,
             assets=self.assets,
             # https://github.com/python/mypy/issues/4976#issuecomment-460971843

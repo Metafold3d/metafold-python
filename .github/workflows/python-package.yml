@@ -23,7 +23,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install requests-toolbelt ruff mypy typing_extensions types-networkx types-requests pytest numpy
       - name: Lint with Ruff
-        run: ruff --output-format=github .
+        run: ruff check --output-format=github .
       - run: |
           mypy metafold
           mypy --check-untyped-defs tests/test_func.py

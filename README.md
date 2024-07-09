@@ -2,6 +2,9 @@
 
 [![PyPi](https://img.shields.io/pypi/v/metafold.svg)](https://pypi.python.org/pypi/metafold)
 
+> [!IMPORTANT]
+> Until the package is at major version one (1.x.x) the API should be considered unstable.
+
 ## Installation
 
 ```

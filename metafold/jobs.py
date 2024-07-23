@@ -1,6 +1,6 @@
 from attrs import field, frozen
 from datetime import datetime
-from metafold.api import asdatetime, asdict
+from metafold.api import asdatetime, asdict, optional
 from metafold.assets import Asset
 from metafold.client import Client
 from metafold.exceptions import PollTimeout
@@ -32,6 +32,10 @@ class Job:
     type: str
     parameters: dict[str, Any]
     created: datetime = field(converter=asdatetime)
+    finished: Optional[datetime] = field(
+        converter=lambda v: optional(asdatetime)(v),
+        default=None,
+    )
     state: str
     assets: list[Asset] = field(converter=_assets)
     meta: dict[str, Any]

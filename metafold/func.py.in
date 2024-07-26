@@ -1,8 +1,6 @@
 # ruff: noqa: F401
-"""
-This file was automatically generated from the source file: func.py.in.
-Any edits should be made to the template file before re-running the codegen.
-"""
+# This file was automatically generated from the source file: func.py.in.
+# Any edits should be made to the template file before re-running the codegen.
 from typing import Literal, Optional, TypedDict, TypeVar, TYPE_CHECKING, Union
 from typing import cast
 import sys

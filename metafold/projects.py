@@ -9,6 +9,12 @@ from typing import Any, Optional, Union
 
 
 class Access(Enum):
+    """Project access scope.
+
+    Attributes:
+        PRIVATE: Project is private to owner.
+        PUBLIC: Project may be accessed by unauthenticated users.
+    """
     PRIVATE = "private"
     PUBLIC = "public"
 

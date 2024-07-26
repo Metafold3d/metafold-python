@@ -13,6 +13,9 @@ class MetafoldClient(Client):
         assets: Sub-client for assets endpoint.
         jobs: Sub-client for jobs endpoint.
     """
+    projects: ProjectsEndpoint
+    assets: AssetsEndpoint
+    jobs: JobsEndpoint
 
     def __init__(
         self, access_token: str,

@@ -32,7 +32,6 @@ class Client:
                 "Authorization": f"Bearer {access_token}",
             })
 
-
     def project_id(self, id: Optional[str] = None) -> str:
         id = id or self._default_project
         if not id:
@@ -40,6 +39,9 @@ class Client:
                 "Project ID required, set a default ID when initializing the client"
             )
         return id
+
+    def set_project_id(self, id: str) -> None:
+        self._default_project = id
 
     def _request(
         self, request: Callable[..., Response], url: str,

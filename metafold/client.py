@@ -1,3 +1,4 @@
+from metafold.auth import AuthProvider
 from requests import HTTPError, Response, Session
 from typing import Any, Callable, Optional
 from urllib.parse import urljoin
@@ -8,17 +9,28 @@ class Client:
     """Base client."""
 
     def __init__(
-        self, access_token: str, base_url: str,
+        self,
+        base_url: str,
+        access_token: Optional[str] = None,
         project_id: Optional[str] = None,
+        auth: Optional[AuthProvider] = None
     ) -> None:
+        if bool(auth) == bool(access_token):
+            raise ValueError(
+                "Expected AuthProvider or access_token to be provided"
+            )
+        self._auth = auth
         self._default_project = project_id
         self._base_url = base_url
         self._session = Session()
         self._session.headers.update({
             "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
             "User-Agent": f"Python/{platform.python_version()}",
         })
+        if access_token:
+            self._session.headers.update({
+                "Authorization": f"Bearer {access_token}",
+            })
 
     def project_id(self, id: Optional[str] = None) -> str:
         id = id or self._default_project
@@ -28,12 +40,18 @@ class Client:
             )
         return id
 
+    def set_project_id(self, id: str) -> None:
+        self._default_project = id
+
     def _request(
         self, request: Callable[..., Response], url: str,
         *args: Any, **kwargs: Any,
     ) -> Response:
         url = urljoin(self._base_url, url)
-        r: Response = request(url, *args, **kwargs)
+        headers = None
+        if self._auth:
+            headers = {"Authorization": f"Bearer {self._auth.get_token()}"}
+        r: Response = request(url, *args, **kwargs, headers=headers)
         if not r.ok:
             body: dict[str, Any] = r.json()
             # Error responses aren't entirely consistent in the Metafold API,

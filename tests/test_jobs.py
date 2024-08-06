@@ -206,6 +206,28 @@ def test_run_job(client):
     )
 
 
+def test_poll_job(client):
+    params = {
+        "foo": 1,
+        "bar": "a",
+        "baz": [2, "b"],
+    }
+    url = client.jobs.run_status("test_job", params, name="My Job")
+    assert url == "http://localhost:8000/projects/1/jobs/1/status"
+
+    r = client.jobs.poll(url)
+    assert Job(**r.json()) == Job(
+        id="1",
+        name="My Job",
+        type="test_job",
+        parameters=params,
+        created=default_dt,
+        state="success",
+        assets=[asset_obj],
+        meta=None,
+    )
+
+
 def test_update_job(client):
     j = client.jobs.update("1", name="baz")
     assert j.name == "baz"

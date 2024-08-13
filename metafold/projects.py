@@ -106,7 +106,7 @@ class ProjectsEndpoint:
         """
         if isinstance(access, str):
             access = check_access(access)
-        payload = asdict(name=name, access=str(access), project=data)
+        payload = asdict(name=name, access=access.value, project=data)
         r: Response = self._client.post("/projects", json=payload)
         return Project(**r.json())
 
@@ -126,7 +126,7 @@ class ProjectsEndpoint:
         """
         if isinstance(access, str):
             access = check_access(access)
-        payload = asdict(source=id, name=name, access=str(access))
+        payload = asdict(source=id, name=name, access=access.value)
         r: Response = self._client.post("/projects", json=payload)
         return Project(**r.json())
 
@@ -158,7 +158,7 @@ class ProjectsEndpoint:
         payload = asdict(name=name, project=data, graph=graph)
         # Access is optional, but we also need to cast to str
         if access:
-            payload["access"] = str(access)
+            payload["access"] = access.value
         r: Response = self._client.patch(url, json=payload)
         return Project(**r.json())
 

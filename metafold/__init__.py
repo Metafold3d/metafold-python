@@ -25,7 +25,7 @@ class MetafoldClient(Client):
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         auth_domain: str = "metafold3d.us.auth0.com",
-        base_url: str = "https://api.metafold3d.com",
+        base_url: str = "https://api.metafold3d.com/",
     ) -> None:
         """Initialize Metafold API client.
 

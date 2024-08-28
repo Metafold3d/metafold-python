@@ -233,6 +233,6 @@ class JSONEvaluator(BaseEvaluator):
         if parameters:
             for k, v in parameters.items():
                 if _USE_NUMPY and isinstance(v, np.ndarray):
-                    parameters[k] = v.tolist()
+                    parameters[k] = v.flatten().tolist()
             operator["parameters"] = parameters
         return operator

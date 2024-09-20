@@ -605,6 +605,42 @@ class SampleLattice(TypedFunc[Literal[FuncType.FLOAT]]):
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
 
 
+class SampleSpinodoid_Parameters(TypedDict, total=False):
+    angles: Vec3f
+    density: float
+    wave_count: int
+    xform: Mat4f
+
+
+class SampleSpinodoid(TypedFunc[Literal[FuncType.FLOAT]]):
+    def __init__(
+        self,
+        points: TypedFunc[Literal[FuncType.VEC3F]],
+        parameters: Optional[SampleSpinodoid_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Points": points,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
+    @cache
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.FLOAT]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
+        r = eval_(
+            "SampleSpinodoid",
+            inputs=inputs,
+            assets=self.assets,
+            # https://github.com/python/mypy/issues/4976#issuecomment-460971843
+            parameters=cast(Optional[Params], self.parameters),
+        )
+        return cast(TypedResult[Literal[FuncType.FLOAT]], r)
+
+
 SampleSurfaceLattice_Enum_lattice_type: TypeAlias = Literal["CD", "CI2Y", "CP", "CPM_Y", "CS", "CY", "C_Y", "D", "F", "FRD", "Gyroid", "I2Y", "IWP", "None", "P", "PM_Y", "S", "SD1", "Schwarz", "SchwarzD", "SchwarzN", "SchwarzPW", "SchwarzW", "W", "Y"]
 
 

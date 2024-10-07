@@ -1,4 +1,4 @@
-from auth0.authentication import GetToken
+from auth0.authentication import GetToken  # type: ignore
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
 from typing import Optional

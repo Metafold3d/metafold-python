@@ -157,7 +157,7 @@ class ProjectsEndpoint:
         url = f"/projects/{id}"
         payload = asdict(name=name, project=data, graph=graph)
         # Access is optional, but we also need to cast to str
-        if access:
+        if isinstance(access, Access):
             payload["access"] = access.value
         r: Response = self._client.patch(url, json=payload)
         return Project(**r.json())

@@ -608,6 +608,7 @@ class SampleLattice(TypedFunc[Literal[FuncType.FLOAT]]):
 class SampleSpinodoid_Parameters(TypedDict, total=False):
     angles: Vec3f
     density: float
+    pore_size: float
     wave_count: int
     xform: Mat4f
 

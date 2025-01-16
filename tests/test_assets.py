@@ -171,19 +171,6 @@ def test_create_asset(client):
     )
 
 
-def test_update_asset(client):
-    with open(test_file, "rb") as f:
-        a = client.assets.update("1", f)
-    assert a == Asset(
-        id="1",
-        filename="test.png",
-        size=67,
-        checksum="sha256:089ad5bf4831b6758e9907db43bc5ebba2e9248a9929dad6132c49932e538278",
-        created=default_dt,
-        modified=default_dt,
-    )
-
-
 def test_delete_asset(client):
     # FIXME: Assert something
     client.assets.delete("1")

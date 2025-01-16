@@ -115,30 +115,6 @@ class AssetsEndpoint:
             fp.close()
         return Asset(**r.json())
 
-    def update(
-        self, asset_id: str,
-        f: Union[str, bytes, PathLike, IO[bytes]],
-        project_id: Optional[str] = None,
-    ) -> Asset:
-        """Update an asset.
-
-        Args:
-            asset_id: ID of asset to update.
-            f: File-like object (opened in binary mode) or path to file on disk.
-            project_id: Asset project ID.
-
-        Returns:
-            Updated asset resource.
-        """
-        project_id = self._client.project_id(project_id)
-        fp: IO[bytes] = _open_file(f)
-        try:
-            url = f"/projects/{project_id}/assets/{asset_id}"
-            r: Response = self._client.patch(url, files={"file": fp})
-        finally:
-            fp.close()
-        return Asset(**r.json())
-
     def delete(self, asset_id: str, project_id: Optional[str] = None) -> None:
         """Delete an asset.
 

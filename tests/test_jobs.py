@@ -39,7 +39,6 @@ job_list = [
         },
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
-        "assets": [asset_json],
         "meta": None,
     },
     {
@@ -51,7 +50,6 @@ job_list = [
         },
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
-        "assets": [asset_json],
         "meta": None,
     },
     {
@@ -63,7 +61,6 @@ job_list = [
         },
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
-        "assets": [asset_json],
         "meta": None,
     },
 ]
@@ -103,7 +100,8 @@ class MockRequestHandler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            payload = job_list[-1]
+            payload = deepcopy(job_list[-1])
+            payload["assets"] = [asset_json]
             self.wfile.write(json.dumps(payload).encode())
         elif u.path == "/projects/1/jobs/1/status":
             global poll_count
@@ -145,7 +143,10 @@ class MockRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             payload = deepcopy(job_list[-1])
-            payload["name"] = "baz"
+            payload.update({
+                "name": "baz",
+                "assets": [asset_json],
+            })
             self.wfile.write(json.dumps(payload).encode())
         else:
             self.send_error(HTTPStatus.NOT_FOUND)

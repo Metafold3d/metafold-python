@@ -38,7 +38,10 @@ class Job:
         default=None,
     )
     state: str
-    assets: list[Asset] = field(converter=_assets)
+    assets: Optional[list[Asset]] = field(
+        converter=lambda v: optional(_assets)(v),
+        default=None,
+    )
     meta: dict[str, Any]
 
 

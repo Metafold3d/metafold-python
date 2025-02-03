@@ -100,6 +100,38 @@ class CSG(TypedFunc[Literal[FuncType.FLOAT]]):
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
 
 
+class ComputeCurvatures_Parameters(TypedDict, total=False):
+
+
+class ComputeCurvatures(TypedFunc[Literal[FuncType.VEC3F]]):
+    def __init__(
+        self,
+        samples: Func,
+        parameters: Optional[ComputeCurvatures_Parameters] = None,
+    ):
+        self.inputs: Optional[dict[str, Func]]
+        self.inputs = {
+            "Samples": samples,
+        }
+        self.assets: Optional[Assets]
+        self.assets = None
+        self.parameters = parameters
+
+    @cache
+    def __call__(self, eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
+        inputs: Optional[Inputs] = None
+        if self.inputs:
+            inputs = dict((k, v(eval_)) for k, v in self.inputs.items())
+        r = eval_(
+            "ComputeCurvatures",
+            inputs=inputs,
+            assets=self.assets,
+            # https://github.com/python/mypy/issues/4976#issuecomment-460971843
+            parameters=cast(Optional[Params], self.parameters),
+        )
+        return cast(TypedResult[Literal[FuncType.VEC3F]], r)
+
+
 class ComputeNormals_Parameters(TypedDict, total=False):
     volume_offset: Vec3f
     volume_size: Vec3f

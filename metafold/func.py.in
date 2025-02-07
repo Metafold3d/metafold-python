@@ -77,6 +77,7 @@ def PointSource(eval_: Evaluator) -> TypedResult[Literal[FuncType.VEC3F]]:
 
 
 class {{ $type }}_Parameters(TypedDict, total=False):
+{{- if len $op.Params }}
 {{- range $name, $param := $op.Params }}
 {{- $paramType := parameterType $type $name $param }}
     {{ $name }}: {{ if $param.IsArray -}}
@@ -84,6 +85,9 @@ Union[list[{{ $paramType }}], "np.ndarray"]
 {{- else -}}
 {{ $paramType }}
 {{- end }}
+{{- end }}
+{{- else }}
+    pass
 {{- end }}
 
 

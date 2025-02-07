@@ -101,17 +101,18 @@ class CSG(TypedFunc[Literal[FuncType.FLOAT]]):
 
 
 class ComputeCurvatures_Parameters(TypedDict, total=False):
+    pass
 
 
 class ComputeCurvatures(TypedFunc[Literal[FuncType.VEC3F]]):
     def __init__(
         self,
-        samples: Func,
+        volume: Func,
         parameters: Optional[ComputeCurvatures_Parameters] = None,
     ):
         self.inputs: Optional[dict[str, Func]]
         self.inputs = {
-            "Samples": samples,
+            "Volume": volume,
         }
         self.assets: Optional[Assets]
         self.assets = None

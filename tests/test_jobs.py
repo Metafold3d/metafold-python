@@ -3,12 +3,17 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from metafold.assets import Asset
-from metafold.jobs import Job
+from metafold.jobs import Job, IO
 from urllib.parse import parse_qs, urlparse
 import json
 import pytest
 
 default_dt = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+default_params = {
+    "foo": "...",
+    "bar": "...",
+}
 
 asset_json = {
     "id": "1",
@@ -34,33 +39,54 @@ job_list = [
         "id": "3",
         "name": "bar",
         "type": "evaluate_graph",
-        "parameters": {
-            "graph": None,
-        },
-        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
+        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "started": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "error": None,
+        "inputs": {
+            "params": default_params,
+        },
+        "outputs": {
+            "params": None,
+        },
+        "parameters": default_params,
         "meta": None,
     },
     {
         "id": "2",
         "name": "foo",
         "type": "evaluate_graph",
-        "parameters": {
-            "graph": None,
-        },
-        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
+        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "started": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "error": None,
+        "inputs": {
+            "params": default_params,
+        },
+        "outputs": {
+            "params": None,
+        },
+        "parameters": default_params,
         "meta": None,
     },
     {
         "id": "1",
         "name": "foo",
         "type": "evaluate_graph",
-        "parameters": {
-            "graph": None,
-        },
-        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "state": "success",
+        "created": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "started": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "error": None,
+        "inputs": {
+            "params": default_params,
+        },
+        "outputs": {
+            "params": None,
+        },
+        "parameters": default_params,
         "meta": None,
     },
 ]
@@ -69,13 +95,26 @@ new_job = {
     "id": "1",
     "name": "My Job",
     "type": "test_job",
-    "parameters": {
-        "foo": 1,
-        "bar": "a",
-        "baz": [2, "b"],
-    },
     "created": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "started": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "error": None,
+    "inputs": {
+        "params": {
+            "foo": "1",
+            "bar": "a",
+            "baz": "[2, \"b\"]",
+        },
+    },
+    "outputs": {
+        "params": None,
+    },
     "assets": [],
+    "parameters": {
+        "foo": "1",
+        "bar": "a",
+        "baz": "[2, \"b\"]",
+    },
     "meta": None,
 }
 
@@ -178,40 +217,47 @@ def test_get_job(client):
         id="1",
         name="foo",
         type="evaluate_graph",
-        parameters={
-            "graph": None,
-        },
-        created=default_dt,
         state="success",
+        created=default_dt,
+        started=default_dt,
+        finished=default_dt,
+        error=None,
+        inputs=IO(params=default_params),
+        outputs=IO(),
         assets=[asset_obj],
+        parameters=default_params,
         meta=None,
     )
 
 
 def test_run_job(client):
     params = {
-        "foo": 1,
+        "foo": "1",
         "bar": "a",
-        "baz": [2, "b"],
+        "baz": "[2, \"b\"]",
     }
     j = client.jobs.run("test_job", params, name="My Job")
     assert j == Job(
         id="1",
         name="My Job",
         type="test_job",
-        parameters=params,
-        created=default_dt,
         state="success",
+        created=default_dt,
+        started=default_dt,
+        finished=default_dt,
+        inputs=IO(params=params),
+        outputs=IO(),
         assets=[asset_obj],
+        parameters=params,
         meta=None,
     )
 
 
 def test_poll_job(client):
     params = {
-        "foo": 1,
+        "foo": "1",
         "bar": "a",
-        "baz": [2, "b"],
+        "baz": "[2, \"b\"]",
     }
     url = client.jobs.run_status("test_job", params, name="My Job")
     assert url == "http://localhost:8000/projects/1/jobs/1/status"
@@ -221,10 +267,14 @@ def test_poll_job(client):
         id="1",
         name="My Job",
         type="test_job",
-        parameters=params,
-        created=default_dt,
         state="success",
+        created=default_dt,
+        started=default_dt,
+        finished=default_dt,
+        inputs=IO(params=params),
+        outputs=IO(),
         assets=[asset_obj],
+        parameters=params,
         meta=None,
     )
 

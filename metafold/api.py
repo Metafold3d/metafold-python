@@ -2,20 +2,6 @@ from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Optional, TypeVar, Union
 
-T = TypeVar("T")
-U = TypeVar("U")
-
-
-def optional(f: Callable[[T], U]) -> Callable[[Optional[T]], Optional[U]]:
-    """Decorator to generate converters that accept optional values."""
-    @wraps(f)
-    def decorator(v: Optional[T]) -> Optional[U]:
-        if v is None:
-            return v
-        return f(v)
-
-    return decorator
-
 
 def asdatetime(s: Union[str, datetime]) -> datetime:
     """Parse Metafold API datetime.
@@ -38,3 +24,21 @@ def asdict(**kwargs: Any) -> dict[str, Any]:
         if v is not None:
             d[k] = v
     return d
+
+
+T = TypeVar("T")
+U = TypeVar("U")
+
+
+def optional(f: Callable[[T], U]) -> Callable[[Optional[T]], Optional[U]]:
+    """Decorator to generate converters that accept optional values."""
+    @wraps(f)
+    def decorator(v: Optional[T]) -> Optional[U]:
+        if v is None:
+            return v
+        return f(v)
+
+    return decorator
+
+
+optional_datetime = optional(asdatetime)

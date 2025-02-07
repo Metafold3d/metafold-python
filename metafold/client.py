@@ -1,8 +1,10 @@
 from metafold.auth import AuthProvider
+from metafold.exceptions import PollTimeout
 from requests import HTTPError, Response, Session
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 from urllib.parse import urljoin
 import platform
+import time
 
 
 class Client:
@@ -74,3 +76,29 @@ class Client:
 
     def delete(self, url: str, *args: Any, **kwargs: Any) ->  Response:
         return self._request(self._session.delete, url, *args, **kwargs)
+
+    def poll(
+        self, url: str,
+        timeout: Union[int, float] = 120,
+        every: Union[int, float] = 1,
+        ) -> Response:
+        """Poll the given URL in regular intervals.
+
+        Helpful for waiting on async processes given a status URL.
+
+        Args:
+            timeout: Time in seconds to wait for a result.
+            every: Frequency in seconds.
+
+        Returns:
+            HTTP response.
+        """
+        t0 = time.monotonic()
+        r = self.get(url)
+        while r.status_code == 202:
+            elapsed = time.monotonic() - t0
+            if elapsed >= timeout:
+                raise PollTimeout(f"Polling timed out: {url}")
+            time.sleep(1)
+            r = self.get(url)
+        return r

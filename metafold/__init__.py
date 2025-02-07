@@ -2,6 +2,7 @@ from metafold.client import Client
 from metafold.projects import ProjectsEndpoint
 from metafold.assets import AssetsEndpoint
 from metafold.jobs import JobsEndpoint
+from metafold.workflows import WorkflowsEndpoint
 from metafold.auth import AuthProvider
 from typing import Optional
 
@@ -17,6 +18,7 @@ class MetafoldClient(Client):
     projects: ProjectsEndpoint
     assets: AssetsEndpoint
     jobs: JobsEndpoint
+    workflows: WorkflowsEndpoint
 
     def __init__(
         self,
@@ -48,3 +50,4 @@ class MetafoldClient(Client):
         self.projects = ProjectsEndpoint(self)
         self.assets = AssetsEndpoint(self)
         self.jobs = JobsEndpoint(self)
+        self.workflows = WorkflowsEndpoint(self)

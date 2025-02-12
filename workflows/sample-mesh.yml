@@ -1,0 +1,19 @@
+---
+jobs:
+  preprocess-mesh:
+    type: mesh/preprocess
+  compute-bvh:
+    type: mesh/compute-bvh
+    needs:
+    - preprocess-mesh
+    assets:
+      mesh: preprocess-mesh
+  sample-mesh:
+    type: implicit/from-mesh
+    needs:
+    - preprocess-mesh
+    - compute-bvh
+    assets:
+      mesh: preprocess-mesh
+      bvh: compute-bvh
+...

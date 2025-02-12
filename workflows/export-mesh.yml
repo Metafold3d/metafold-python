@@ -1,0 +1,11 @@
+---
+jobs:
+  evaluate-graph:
+    type: implicit/evaluate
+  export-mesh:
+    type: mesh/from-volume
+    needs:
+    - evaluate-graph
+    assets:
+      volume: evaluate-graph
+...

@@ -24,8 +24,10 @@ class Workflow:
     jobs: list[str] = field(factory=list)
     state: str
     created: datetime = field(converter=asdatetime)
-    started: Optional[datetime] = field(converter=optional_datetime, default=None)
-    finished: Optional[datetime] = field(converter=optional_datetime, default=None)
+    started: Optional[datetime] = field(
+        converter=lambda v: optional_datetime(v), default=None)
+    finished: Optional[datetime] = field(
+        converter=lambda v: optional_datetime(v), default=None)
     definition: str
 
 
@@ -101,7 +103,7 @@ class WorkflowsEndpoint:
         r: Response = self._client.post(f"/projects/{project_id}/workflows", json=payload)
         url = r.json()["link"]
         try:
-            r: Response = self._client.poll(url, timeout)
+            r = self._client.poll(url, timeout)
         except PollTimeout as e:
             raise RuntimeError(
                 f"Workflow failed to complete within {timeout} seconds"

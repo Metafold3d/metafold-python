@@ -106,6 +106,7 @@ ComputeCurvatures_Enum_spacing_type: TypeAlias = Literal["Continuous", "Discrete
 class ComputeCurvatures_Parameters(TypedDict, total=False):
     spacing_type: ComputeCurvatures_Enum_spacing_type
     step_size: float
+    volume_size: Vec3f
 
 
 class ComputeCurvatures(TypedFunc[Literal[FuncType.VEC3F]]):

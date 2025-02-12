@@ -1,6 +1,8 @@
 """Helper script to dispatch workflows."""
 from argparse import ArgumentParser, FileType
 from metafold import MetafoldClient
+from pathlib import Path
+from pprint import pprint
 import json
 import os
 import sys
@@ -17,7 +19,7 @@ def main():
 
     parser.add_argument(
         "--asset-uploads", nargs="*",
-        type=FileType("rb"), help="assets to upload before dispatch")
+        type=Path, help="assets to upload before dispatch")
 
     project_id = os.environ.get("METAFOLD_PROJECT_ID")
     parser.add_argument("-p", "--project-id", default=project_id)
@@ -60,8 +62,8 @@ def main():
 
     if args.asset_uploads:
         print("Uploading assets…")
-        for f in args.asset_uploads:
-            m.assets.create(f)
+        for p in args.asset_uploads:
+            m.assets.create(p.resolve())
 
     print("Running workflow…")
     definition = args.workflow.read()
@@ -69,10 +71,15 @@ def main():
 
     print(f"Workflow completed: {w.state}")
 
-    if w.state == "failure":
-        for job_id in w.jobs:
-            j = m.jobs.get(job_id)
-            if j.state == "failure":
+    for job_id in w.jobs:
+        j = m.jobs.get(job_id)
+        match j.state:
+            case "success":
+                if j.outputs and j.outputs.assets:
+                    pprint(j.outputs.assets)
+                if j.outputs and j.outputs.params:
+                    pprint(j.outputs.params)
+            case "failure":
                 print(f"Job {j.id} failed: {j.error}")
 
     return 0

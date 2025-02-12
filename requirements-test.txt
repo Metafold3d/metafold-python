@@ -1,0 +1,14 @@
+attrs~=23.2
+auth0-python~=4.7
+numpy~=1.23
+requests~=2.31
+scipy~=1.11
+
+mypy
+networkx
+pytest
+requests-toolbelt
+ruff
+types-networkx
+types-requests
+typing_extensions

@@ -5,7 +5,8 @@ from metafold.assets import Asset
 from metafold.client import Client
 from metafold.exceptions import PollTimeout
 from requests import Response
-from typing import Any, Optional, TypeAlias, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union
+from typing_extensions import TypeAlias
 
 
 def _assets(v: list[Union[dict[str, Any], Asset]]) -> list[Asset]:
@@ -37,7 +38,7 @@ class IO:
     """
     params: Optional[dict[str, Any]] = None
     assets: Optional[dict[str, Asset]] = field(
-        converter=optional(_assets_dict), default=None)
+        converter=lambda v: optional(_assets_dict)(v), default=None)
 
     @staticmethod
     def from_dict(d: IODict) -> "IO":
@@ -69,13 +70,16 @@ class Job:
     type: str
     state: str
     created: datetime = field(converter=asdatetime)
-    started: Optional[datetime] = field(converter=optional_datetime, default=None)
-    finished: Optional[datetime] = field(converter=optional_datetime, default=None)
+    started: Optional[datetime] = field(
+        converter=lambda v: optional_datetime(v), default=None)
+    finished: Optional[datetime] = field(
+        converter=lambda v: optional_datetime(v), default=None)
     error: Optional[str] = None
     inputs: IO = field(converter=lambda v: v if isinstance(v, IO) else IO.from_dict(v))
     outputs: IO = field(converter=lambda v: v if isinstance(v, IO) else IO.from_dict(v))
     # NOTE(ryan): Deprecated
-    assets: Optional[list[Asset]] = field(converter=optional(_assets), default=None)
+    assets: Optional[list[Asset]] = field(
+        converter=lambda v: optional(_assets)(v), default=None)
     parameters: dict[str, Any]
     meta: dict[str, Any]
 

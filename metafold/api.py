@@ -35,7 +35,7 @@ def optional(f: Callable[[T], U]) -> Callable[[Optional[T]], Optional[U]]:
     @wraps(f)
     def decorator(v: Optional[T]) -> Optional[U]:
         if v is None:
-            return v
+            return None
         return f(v)
 
     return decorator

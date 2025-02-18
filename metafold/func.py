@@ -100,19 +100,23 @@ class CSG(TypedFunc[Literal[FuncType.FLOAT]]):
         return cast(TypedResult[Literal[FuncType.FLOAT]], r)
 
 
+ComputeCurvatures_Enum_spacing_type: TypeAlias = Literal["Continuous", "Discrete"]
+
+
 class ComputeCurvatures_Parameters(TypedDict, total=False):
-    pass
+    spacing_type: ComputeCurvatures_Enum_spacing_type
+    step_size: float
 
 
 class ComputeCurvatures(TypedFunc[Literal[FuncType.VEC3F]]):
     def __init__(
         self,
-        volume: Func,
+        samples: Func,
         parameters: Optional[ComputeCurvatures_Parameters] = None,
     ):
         self.inputs: Optional[dict[str, Func]]
         self.inputs = {
-            "Volume": volume,
+            "Samples": samples,
         }
         self.assets: Optional[Assets]
         self.assets = None

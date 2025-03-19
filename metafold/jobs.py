@@ -77,6 +77,7 @@ class Job:
     error: Optional[str] = None
     inputs: IO = field(converter=lambda v: v if isinstance(v, IO) else IO.from_dict(v))
     outputs: IO = field(converter=lambda v: v if isinstance(v, IO) else IO.from_dict(v))
+    needs: list[str]
     # NOTE(ryan): Deprecated
     assets: Optional[list[Asset]] = field(
         converter=lambda v: optional(_assets)(v), default=None)

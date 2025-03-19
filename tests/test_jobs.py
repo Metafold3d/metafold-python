@@ -50,6 +50,7 @@ job_list = [
         "outputs": {
             "params": None,
         },
+        "needs": [],
         "parameters": default_params,
         "meta": None,
     },
@@ -68,6 +69,7 @@ job_list = [
         "outputs": {
             "params": None,
         },
+        "needs": [],
         "parameters": default_params,
         "meta": None,
     },
@@ -86,6 +88,7 @@ job_list = [
         "outputs": {
             "params": None,
         },
+        "needs": [],
         "parameters": default_params,
         "meta": None,
     },
@@ -109,6 +112,7 @@ new_job = {
     "outputs": {
         "params": None,
     },
+    "needs": [],
     "assets": [],
     "parameters": {
         "foo": "1",
@@ -224,6 +228,7 @@ def test_get_job(client):
         error=None,
         inputs=IO(params=default_params),
         outputs=IO(),
+        needs=[],
         assets=[asset_obj],
         parameters=default_params,
         meta=None,
@@ -247,6 +252,7 @@ def test_run_job(client):
         finished=default_dt,
         inputs=IO(params=params),
         outputs=IO(),
+        needs=[],
         assets=[asset_obj],
         parameters=params,
         meta=None,
@@ -273,6 +279,7 @@ def test_poll_job(client):
         finished=default_dt,
         inputs=IO(params=params),
         outputs=IO(),
+        needs=[],
         assets=[asset_obj],
         parameters=params,
         meta=None,

@@ -22,6 +22,7 @@ asset_json = {
     "checksum": "sha256:6310a5951d58eb3e0fdd8c8767c606615552899e65019cb1582508a7c7bfec39",
     "created": "Mon, 01 Jan 2024 00:00:00 GMT",
     "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "project_id": "1",
 }
 
 asset_obj = Asset(
@@ -31,6 +32,7 @@ asset_obj = Asset(
     checksum="sha256:6310a5951d58eb3e0fdd8c8767c606615552899e65019cb1582508a7c7bfec39",
     created=default_dt,
     modified=default_dt,
+    project_id="1",
 )
 
 # Default sort order is descending by id
@@ -51,6 +53,8 @@ job_list = [
             "params": None,
         },
         "needs": [],
+        "project_id": "1",
+        "workflow_id": None,
         "parameters": default_params,
         "meta": None,
     },
@@ -70,6 +74,8 @@ job_list = [
             "params": None,
         },
         "needs": [],
+        "project_id": "1",
+        "workflow_id": None,
         "parameters": default_params,
         "meta": None,
     },
@@ -89,6 +95,8 @@ job_list = [
             "params": None,
         },
         "needs": [],
+        "project_id": "1",
+        "workflow_id": None,
         "parameters": default_params,
         "meta": None,
     },
@@ -113,6 +121,8 @@ new_job = {
         "params": None,
     },
     "needs": [],
+    "project_id": "1",
+    "workflow_id": None,
     "assets": [],
     "parameters": {
         "foo": "1",
@@ -229,6 +239,8 @@ def test_get_job(client):
         inputs=IO(params=default_params),
         outputs=IO(),
         needs=[],
+        project_id="1",
+        workflow_id=None,
         assets=[asset_obj],
         parameters=default_params,
         meta=None,
@@ -253,6 +265,8 @@ def test_run_job(client):
         inputs=IO(params=params),
         outputs=IO(),
         needs=[],
+        project_id="1",
+        workflow_id=None,
         assets=[asset_obj],
         parameters=params,
         meta=None,
@@ -280,6 +294,8 @@ def test_poll_job(client):
         inputs=IO(params=params),
         outputs=IO(),
         needs=[],
+        project_id="1",
+        workflow_id=None,
         assets=[asset_obj],
         parameters=params,
         meta=None,

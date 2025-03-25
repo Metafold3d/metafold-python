@@ -19,6 +19,7 @@ workflow_list = [
         "started": "Mon, 01 Jan 2024 00:00:00 GMT",
         "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
         "definition": "...",
+        "project_id": "1",
     },
     {
         "id": "2",
@@ -28,6 +29,7 @@ workflow_list = [
         "started": "Mon, 01 Jan 2024 00:00:00 GMT",
         "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
         "definition": "...",
+        "project_id": "1",
     },
     {
         "id": "1",
@@ -37,6 +39,7 @@ workflow_list = [
         "started": "Mon, 01 Jan 2024 00:00:00 GMT",
         "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
         "definition": "...",
+        "project_id": "1",
     },
 ]
 
@@ -47,6 +50,7 @@ new_workflow = {
     "started": "Mon, 01 Jan 2024 00:00:00 GMT",
     "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
     "definition": "foo",
+    "project_id": "1",
 }
 
 poll_count: int = 0
@@ -134,6 +138,7 @@ def test_get_workflow(client):
         started=default_dt,
         finished=default_dt,
         definition="...",
+        project_id="1",
     )
 
 
@@ -148,4 +153,5 @@ def test_run_workflow(client):
         started=default_dt,
         finished=default_dt,
         definition=definition,
+        project_id="1",
     )

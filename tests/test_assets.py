@@ -24,6 +24,7 @@ asset_list = [
         "checksum": "sha256:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "project_id": "1",
     },
     {
         "id": "2",
@@ -32,6 +33,7 @@ asset_list = [
         "checksum": "sha256:6310a5951d58eb3e0fdd8c8767c606615552899e65019cb1582508a7c7bfec39",
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "project_id": "1",
     },
     {
         "id": "1",
@@ -40,6 +42,7 @@ asset_list = [
         "checksum": "sha256:6310a5951d58eb3e0fdd8c8767c606615552899e65019cb1582508a7c7bfec39",
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+        "project_id": "1",
     },
 ]
 
@@ -50,6 +53,7 @@ new_asset = {
     "checksum": "sha256:089ad5bf4831b6758e9907db43bc5ebba2e9248a9929dad6132c49932e538278",
     "created": "Mon, 01 Jan 2024 00:00:00 GMT",
     "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "project_id": "1",
 }
 
 
@@ -149,6 +153,7 @@ def test_get_asset(client):
         checksum="sha256:6310a5951d58eb3e0fdd8c8767c606615552899e65019cb1582508a7c7bfec39",
         created=default_dt,
         modified=default_dt,
+        project_id="1",
     )
 
 
@@ -168,6 +173,7 @@ def test_create_asset(client):
         checksum="sha256:089ad5bf4831b6758e9907db43bc5ebba2e9248a9929dad6132c49932e538278",
         created=default_dt,
         modified=default_dt,
+        project_id="1",
     )
 
 

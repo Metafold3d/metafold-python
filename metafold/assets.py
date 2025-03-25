@@ -19,6 +19,7 @@ class Asset:
         checksum: File checksum.
         created: Asset creation datetime.
         modified: Asset last modified datetime.
+        project_id: Project ID.
     """
     id: str
     filename: str
@@ -26,6 +27,7 @@ class Asset:
     checksum: str
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
+    project_id: str
 
 
 class AssetsEndpoint:

@@ -19,6 +19,7 @@ class Workflow:
         started: Workflow started datetime.
         finished: Workflow finished datetime.
         definition: Workflow definition string.
+        project_id: Project ID.
     """
     id: str
     jobs: list[str] = field(factory=list)
@@ -29,6 +30,7 @@ class Workflow:
     finished: Optional[datetime] = field(
         converter=lambda v: optional_datetime(v), default=None)
     definition: str
+    project_id: str
 
 
 class WorkflowsEndpoint:

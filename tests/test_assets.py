@@ -25,6 +25,7 @@ asset_list = [
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
         "project_id": "1",
+        "job_id": None,
     },
     {
         "id": "2",
@@ -34,6 +35,7 @@ asset_list = [
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
         "project_id": "1",
+        "job_id": None,
     },
     {
         "id": "1",
@@ -43,6 +45,7 @@ asset_list = [
         "created": "Mon, 01 Jan 2024 00:00:00 GMT",
         "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
         "project_id": "1",
+        "job_id": None,
     },
 ]
 
@@ -54,6 +57,7 @@ new_asset = {
     "created": "Mon, 01 Jan 2024 00:00:00 GMT",
     "modified": "Mon, 01 Jan 2024 00:00:00 GMT",
     "project_id": "1",
+    "job_id": None,
 }
 
 
@@ -154,6 +158,7 @@ def test_get_asset(client):
         created=default_dt,
         modified=default_dt,
         project_id="1",
+        job_id=None,
     )
 
 
@@ -174,6 +179,7 @@ def test_create_asset(client):
         created=default_dt,
         modified=default_dt,
         project_id="1",
+        job_id=None,
     )
 
 

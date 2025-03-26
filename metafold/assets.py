@@ -20,6 +20,7 @@ class Asset:
         created: Asset creation datetime.
         modified: Asset last modified datetime.
         project_id: Project ID.
+        job_id: Job ID.
     """
     id: str
     filename: str
@@ -28,6 +29,7 @@ class Asset:
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
     project_id: str
+    job_id: Optional[str] = None
 
 
 class AssetsEndpoint:

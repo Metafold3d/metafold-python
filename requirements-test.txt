@@ -1,6 +1,6 @@
 attrs~=23.2
 auth0-python~=4.7
-numpy~=1.23
+numpy~=2.1
 requests~=2.31
 scipy~=1.11
 

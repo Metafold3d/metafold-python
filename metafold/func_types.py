@@ -27,39 +27,39 @@ except ImportError:
 
 Vec2i: TypeAlias = Union[
     Annotated[list[int], 2],
-    "np.ndarray[Literal[2], np.dtype[np.int_]]",
+    "np.ndarray[tuple[Literal[2]], np.dtype[np.int32]]",
 ]
 Vec2f: TypeAlias = Union[
     Annotated[list[float], 2],
-    "np.ndarray[Literal[2], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[2]], np.dtype[np.float32]]",
 ]
 Vec3i: TypeAlias = Union[
     Annotated[list[int], 3],
-    "np.ndarray[Literal[3], np.dtype[np.int_]]",
+    "np.ndarray[tuple[Literal[3]], np.dtype[np.int32]]",
 ]
 Vec3f: TypeAlias = Union[
     Annotated[list[float], 3],
-    "np.ndarray[Literal[3], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[3]], np.dtype[np.float32]]",
 ]
 Vec4i: TypeAlias = Union[
     Annotated[list[int], 4],
-    "np.ndarray[Literal[4], np.dtype[np.int_]]",
+    "np.ndarray[tuple[Literal[4]], np.dtype[np.int32]]",
 ]
 Vec4f: TypeAlias = Union[
     Annotated[list[float], 4],
-    "np.ndarray[Literal[4], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[4]], np.dtype[np.float32]]",
 ]
 Mat2f: TypeAlias = Union[
     Annotated[list[float], 4],
-    "np.ndarray[tuple[Literal[2], Literal[2]], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[2], Literal[2]], np.dtype[np.float32]]",
 ]
 Mat3f: TypeAlias = Union[
     Annotated[list[float], 9],
-    "np.ndarray[tuple[Literal[3], Literal[3]], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[3], Literal[3]], np.dtype[np.float32]]",
 ]
 Mat4f: TypeAlias = Union[
     Annotated[list[float], 16],
-    "np.ndarray[tuple[Literal[4], Literal[4]], np.dtype[np.float_]]",
+    "np.ndarray[tuple[Literal[4], Literal[4]], np.dtype[np.float32]]",
 ]
 
 

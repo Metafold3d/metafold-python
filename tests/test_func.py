@@ -77,7 +77,7 @@ def test_build_graph_json():
         Redistance(
             CSGIntersect(
                 SampleSurfaceLattice(source, gyroidParams),
-                EllipsoidPrimitive(source, {"size": np.array([1, 1, 1])}),
+                EllipsoidPrimitive(source, {"size": [1.0, 1.0, 1.0]}),
             ),
         ),
     )
@@ -91,7 +91,7 @@ def test_build_graph_json():
         Redistance(
             CSGIntersect(
                 SampleSurfaceLattice(PointSource, gyroidParams),
-                EllipsoidPrimitive(PointSource, {"size": np.array([1, 1, 1])}),
+                EllipsoidPrimitive(PointSource, {"size": [1.0, 1.0, 1.0]}),
             ),
         ),
     )
@@ -184,7 +184,7 @@ def test_build_nx_graph():
         Redistance(
             CSGIntersect(
                 SampleSurfaceLattice(source, gyroidParams),
-                EllipsoidPrimitive(source, {"size": np.array([1, 1, 1])}),
+                EllipsoidPrimitive(source, {"size": [1.0, 1.0, 1.0]}),
             ),
         ),
     )
@@ -201,7 +201,7 @@ def test_build_nx_graph():
         Redistance(
             CSGIntersect(
                 SampleSurfaceLattice(PointSource, gyroidParams),
-                EllipsoidPrimitive(PointSource, {"size": np.array([1, 1, 1])}),
+                EllipsoidPrimitive(PointSource, {"size": [1.0, 1.0, 1.0]}),
             ),
         ),
     )

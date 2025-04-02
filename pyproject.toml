@@ -4,21 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metafold"
-version = "0.9.0"
+version = "0.10.0"
 authors = [
     {name = "Metafold 3D", email = "info@metafold3d.com"},
 ]
 dependencies = [
     "attrs~=23.2",
     "auth0-python~=4.7",
-    "numpy~=2.1",
+    "numpy~=2.0",
     "requests~=2.31",
     "scipy~=1.11",
 ]
 readme = "README.md"
 license = {file = "LICENSE"}
 description = "Metafold SDK for Python"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = ["metafold", "api", "sdk", "implicit geometry"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -29,6 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]

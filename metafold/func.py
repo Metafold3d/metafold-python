@@ -138,23 +138,24 @@ class ComputeCurvatures(TypedFunc[Literal[FuncType.VEC3F]]):
         return cast(TypedResult[Literal[FuncType.VEC3F]], r)
 
 
+ComputeNormals_Enum_spacing_type: TypeAlias = Literal["Continuous", "Discrete"]
+
+
 class ComputeNormals_Parameters(TypedDict, total=False):
-    volume_offset: Vec3f
+    spacing_type: ComputeNormals_Enum_spacing_type
+    step_size: float
     volume_size: Vec3f
-    xform: Mat4f
 
 
 class ComputeNormals(TypedFunc[Literal[FuncType.VEC3F]]):
     def __init__(
         self,
-        points: TypedFunc[Literal[FuncType.VEC3F]],
-        volume: Func,
+        samples: Func,
         parameters: Optional[ComputeNormals_Parameters] = None,
     ):
         self.inputs: Optional[dict[str, Func]]
         self.inputs = {
-            "Points": points,
-            "Volume": volume,
+            "Samples": samples,
         }
         self.assets: Optional[Assets]
         self.assets = None
@@ -761,6 +762,7 @@ class SampleTriangleMesh(TypedFunc[Literal[FuncType.FLOAT]]):
 
 
 class SampleTriangleMeshBvh_Parameters(TypedDict, total=False):
+    cw_winding: int
     xform: Mat4f
 
 

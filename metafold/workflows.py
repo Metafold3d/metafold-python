@@ -1,10 +1,16 @@
 from attrs import field, frozen
 from datetime import datetime
 from metafold.api import asdatetime, asdict, optional_datetime
+from metafold.assets import Asset
 from metafold.client import Client
 from metafold.exceptions import PollTimeout
+from metafold.jobs import Job
 from requests import Response
-from typing import Optional, Union
+from typing import Optional, Union, cast
+import typing
+
+if typing.TYPE_CHECKING:
+    from metafold import MetafoldClient
 
 
 @frozen(kw_only=True)
@@ -21,6 +27,9 @@ class Workflow:
         definition: Workflow definition string.
         project_id: Project ID.
     """
+    _client: "MetafoldClient"
+    _jobs: dict[str, str] = field(factory=dict, init=False)
+
     id: str
     jobs: list[str] = field(factory=list)
     state: str
@@ -31,6 +40,56 @@ class Workflow:
         converter=lambda v: optional_datetime(v), default=None)
     definition: str
     project_id: str
+
+    def get_asset(self, path: str) -> Union[Asset, None]:
+        """Retrieve an asset from the workflow by dot notation.
+
+        Args:
+            path: Path to asset in the form "job.name", e.g. "sample-mesh.volume"
+                searches for the asset "volume" from the "sample-mesh" job.
+        """
+        job_name, asset_name = self._parse_path(path)
+        job = self._find_job(job_name)
+        if not job or not job.outputs.assets:
+            return None
+        for name, asset in job.outputs.assets.items():
+            if name == asset_name:
+                return asset
+        return None
+
+    def get_parameter(self, path: str) -> Union[str, None]:
+        """Retrieve a parameter from the workflow by dot notation.
+
+        Args:
+            path: Path to parameter in the form "job.name", e.g. "sample-mesh.patch_size"
+                searches for the parameter "patch_size" from the "sample-mesh" job.
+        """
+        job_name, param_name = self._parse_path(path)
+        job = self._find_job(job_name)
+        if not job or not job.outputs.params:
+            return None
+        for name, param in job.outputs.params.items():
+            if name == param_name:
+                return param
+        return None
+
+    def _find_job(self, name: str) -> Union[Job, None]:
+        # FIXME(ryan): Update API to return job names as well as IDs.
+        # For now we cache a mapping b/w job name and job id.
+        if job_id := self._jobs.get(name):
+            return self._client.jobs.get(job_id)
+
+        for job_id in self.jobs:
+            job = self._client.jobs.get(job_id)
+            if job.name == name:
+                self._jobs[name] = job_id
+                return job
+        return None
+
+    @staticmethod
+    def _parse_path(path: str) -> tuple[str, str]:
+        first, second = path.split(".", maxsplit=1)
+        return first, second
 
 
 class WorkflowsEndpoint:
@@ -61,7 +120,7 @@ class WorkflowsEndpoint:
         url = f"/projects/{project_id}/workflows"
         payload = asdict(sort=sort, q=q)
         r: Response = self._client.get(url, params=payload)
-        return [Workflow(**w) for w in r.json()]
+        return [Workflow(client=cast("MetafoldClient", self._client), **w) for w in r.json()]
 
     def get(self, workflow_id: str, project_id: Optional[str] = None) -> Workflow:
         """Get a workflow.
@@ -76,7 +135,7 @@ class WorkflowsEndpoint:
         project_id = self._client.project_id(project_id)
         url = f"/projects/{project_id}/workflows/{workflow_id}"
         r: Response = self._client.get(url)
-        return Workflow(**r.json())
+        return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
     def run(
         self, definition: str,
@@ -110,7 +169,7 @@ class WorkflowsEndpoint:
             raise RuntimeError(
                 f"Workflow failed to complete within {timeout} seconds"
             ) from e
-        return Workflow(**r.json())
+        return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
     def cancel(self, workflow_id: str, project_id: Optional[str] = None) -> Workflow:
         """Cancel a running workflow.
@@ -125,7 +184,7 @@ class WorkflowsEndpoint:
         project_id = self._client.project_id(project_id)
         url = f"/projects/{project_id}/workflows/{workflow_id}/cancel"
         r: Response = self._client.post(url)
-        return Workflow(**r.json())
+        return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
     def delete(self, workflow_id: str, project_id: Optional[str] = None):
         """Delete a workflow.

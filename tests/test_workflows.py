@@ -53,6 +53,35 @@ new_workflow = {
     "project_id": "1",
 }
 
+mock_job = {
+    "type": "test_job",
+    "state": "success",
+    "created": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "started": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "finished": "Mon, 01 Jan 2024 00:00:00 GMT",
+    "error": None,
+    "inputs": {
+        "params": None,
+    },
+    "outputs": {
+        "params": {
+            "foo": "1",
+            "bar": "a",
+            "baz": "[2, \"b\"]",
+        },
+    },
+    "needs": [],
+    "project_id": "1",
+    "workflow_id": None,
+    "assets": [],
+    "parameters": {
+        "foo": "1",
+        "bar": "a",
+        "baz": "[2, \"b\"]",
+    },
+    "meta": None,
+}
+
 poll_count: int = 0
 
 
@@ -89,6 +118,20 @@ class MockRequestHandler(BaseHTTPRequestHandler):
                 payload["state"] = "success"
             self.send_header("Content-Type", "application/json")
             self.end_headers()
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/projects/1/jobs/1":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = deepcopy(mock_job)
+            payload.update({"id": "1", "name": "test-job-1"})
+            self.wfile.write(json.dumps(payload).encode())
+        elif u.path == "/projects/1/jobs/2":
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            payload = deepcopy(mock_job)
+            payload.update({"id": "2", "name": "test-job-2"})
             self.wfile.write(json.dumps(payload).encode())
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -131,6 +174,7 @@ def test_list_workflows_filtered(client):
 def test_get_workflow(client):
     w = client.workflows.get("1")
     assert w == Workflow(
+        client=client,
         id="1",
         jobs=["1", "2"],
         state="success",
@@ -141,11 +185,17 @@ def test_get_workflow(client):
         project_id="1",
     )
 
+    # Find params
+    assert w.get_parameter("test-job-2.foo") == "1"
+    assert w.get_parameter("test-job-2.foo") == "1"  # Should use cached id
+    assert w.get_parameter("test-job-2.bar") == "a"
+
 
 def test_run_workflow(client):
     definition = "foo"
     w = client.workflows.run(definition)
     assert w == Workflow(
+        client=client,
         id="1",
         jobs=["1", "2"],
         state="success",

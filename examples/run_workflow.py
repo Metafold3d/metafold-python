@@ -1,11 +1,36 @@
 """Helper script to dispatch workflows."""
 from argparse import ArgumentParser, FileType
 from metafold import MetafoldClient
+from multiprocessing import Pool
 from pathlib import Path
 from pprint import pprint
+from typing import Optional
 import json
 import os
 import sys
+
+
+def run_workflow(
+        m: MetafoldClient,
+        definition: str,
+        assets: Optional[dict[str, str]] = None,
+        params: Optional[dict[str, str]] = None,
+        timeout: int = 5 * 60):
+    print("Running workflow…")
+    w = m.workflows.run(definition, assets=assets, parameters=params, timeout=timeout)
+
+    print(f"Workflow completed: {w.state}")
+
+    for job_id in w.jobs:
+        j = m.jobs.get(job_id)
+        match j.state:
+            case "success":
+                if j.outputs and j.outputs.assets:
+                    pprint(j.outputs.assets)
+                if j.outputs and j.outputs.params:
+                    pprint(j.outputs.params)
+            case "failure":
+                print(f"Job {j.id} failed: {j.error}")
 
 
 def main():
@@ -16,6 +41,8 @@ def main():
 
     parser.add_argument("--assets", help="workflow asset mapping")
     parser.add_argument("--params", help="workflow parameter mapping")
+    parser.add_argument("--count", type=int, default=1, help="number of repetitions")
+    parser.add_argument("--num-concurrent", type=int, default=4, help="number of concurrent workflows")
 
     parser.add_argument(
         "--asset-uploads", nargs="*",
@@ -65,22 +92,18 @@ def main():
         for p in args.asset_uploads:
             m.assets.create(p.resolve())
 
-    print("Running workflow…")
     definition = args.workflow.read()
-    w = m.workflows.run(definition, assets=assets, parameters=params)
+    if args.count > 1:
+        num_concurrent = max(args.num_concurrent, 4)
+        with Pool(num_concurrent) as p:
+            for _ in range(args.count):
+                p.apply_async(
+                    run_workflow, (m, definition), {"assets": assets, "params": params})
+            p.close()
+            p.join()
 
-    print(f"Workflow completed: {w.state}")
-
-    for job_id in w.jobs:
-        j = m.jobs.get(job_id)
-        match j.state:
-            case "success":
-                if j.outputs and j.outputs.assets:
-                    pprint(j.outputs.assets)
-                if j.outputs and j.outputs.params:
-                    pprint(j.outputs.params)
-            case "failure":
-                print(f"Job {j.id} failed: {j.error}")
+    elif args.count == 1:
+        run_workflow(m, definition, assets=assets, params=params)
 
     return 0
 

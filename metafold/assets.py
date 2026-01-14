@@ -78,6 +78,27 @@ class AssetsEndpoint:
         r: Response = self._client.get(url)
         return Asset(**r.json())
 
+    def download(
+        self, asset_id: str, f: IO[bytes],
+        project_id: Optional[str] = None,
+    ):
+        """Download an asset.
+
+        Args:
+            asset_id: ID of asset to download.
+            f: File-like object open for writing in binary mode.
+            project_id: Asset project ID.
+        """
+        project_id = self._client.project_id(project_id)
+        url = f"/projects/{project_id}/assets/{asset_id}"
+        r: Response = self._client.get(url, params={"download": "true"})
+        r = requests.get(r.json()["link"], stream=True)
+        try:
+            for chunk in r.iter_content(chunk_size=65536):  # 64 KiB
+                f.write(chunk)
+        finally:
+            f.close()
+
     def download_file(
         self, asset_id: str, path: Union[str, PathLike],
         project_id: Optional[str] = None,
@@ -89,13 +110,8 @@ class AssetsEndpoint:
             path: Path to downloaded file.
             project_id: Asset project ID.
         """
-        project_id = self._client.project_id(project_id)
-        url = f"/projects/{project_id}/assets/{asset_id}"
-        r: Response = self._client.get(url, params={"download": "true"})
-        r = requests.get(r.json()["link"], stream=True)
         with open(path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=65536):  # 64 KiB
-                f.write(chunk)
+            self.download(asset_id, f, project_id)
 
     def create(
         self, f: Union[str, bytes, PathLike, IO[bytes]],

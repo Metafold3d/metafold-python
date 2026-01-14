@@ -31,6 +31,7 @@ class Workflow:
     _jobs: dict[str, str] = field(factory=dict, init=False)
 
     id: str
+    link: Optional[str] = None
     jobs: list[str] = field(factory=list)
     state: str
     created: datetime = field(converter=asdatetime)
@@ -159,16 +160,35 @@ class WorkflowsEndpoint:
         Returns:
             Completed workflow resource.
         """
-        project_id = self._client.project_id(project_id)
-        payload = asdict(definition=definition, parameters=parameters, assets=assets)
-        r: Response = self._client.post(f"/projects/{project_id}/workflows", json=payload)
-        url = r.json()["link"]
+        w = self.run_async(definition, parameters, assets, project_id)
         try:
-            r = self._client.poll(url, timeout)
+            r = self._client.poll(w.link, timeout)
         except PollTimeout as e:
             raise RuntimeError(
                 f"Workflow failed to complete within {timeout} seconds"
             ) from e
+        return Workflow(client=cast("MetafoldClient", self._client), **r.json())
+
+    def run_async(
+        self, definition: str,
+        parameters: Optional[dict[str, str]] = None,
+        assets: Optional[dict[str, str]] = None,
+        project_id: Optional[str] = None,
+    ) -> Workflow:
+        """Dispatch a new workflow and return immediately without waiting for result.
+
+        Args:
+            definition: Workflow definition YAML.
+            parameters: Parameter mapping for jobs in the definition.
+            assets: Asset mapping for jobs in the definition.
+            project_id: Workflow project ID.
+
+        Returns:
+            Incomplete workflow resource.
+        """
+        project_id = self._client.project_id(project_id)
+        payload = asdict(definition=definition, parameters=parameters, assets=assets)
+        r: Response = self._client.post(f"/projects/{project_id}/workflows", json=payload)
         return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
     def cancel(self, workflow_id: str, project_id: Optional[str] = None) -> Workflow:

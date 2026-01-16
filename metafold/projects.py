@@ -4,7 +4,7 @@ from enum import Enum
 from metafold.api import asdatetime, asdict
 from metafold.client import Client
 from requests import Response
-from typing import Any, Optional, Union
+from typing import Any
 
 
 class Access(Enum):
@@ -45,9 +45,9 @@ class Project:
     access: Access = field(converter=check_access)
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
-    thumbnail: Optional[str] = None
-    project: Optional[dict[str, Any]] = None
-    graph: Optional[dict[str, Any]] = None
+    thumbnail: str | None = None
+    project: dict[str, Any] | None = None
+    graph: dict[str, Any] | None = None
 
 
 class ProjectsEndpoint:
@@ -56,7 +56,7 @@ class ProjectsEndpoint:
     def __init__(self, client: Client) -> None:
         self._client = client
 
-    def list(self, sort: Optional[str] = None, q: Optional[str] = None) -> list[Project]:
+    def list(self, sort: str | None = None, q: str | None = None) -> list[Project]:
         """List projects.
 
         Args:
@@ -73,7 +73,7 @@ class ProjectsEndpoint:
         r: Response = self._client.get("/projects", params=payload)
         return [Project(**a) for a in r.json()]
 
-    def get(self, id: Optional[str] = None) -> Project:
+    def get(self, id: str | None = None) -> Project:
         """Get an project.
 
         Args:
@@ -89,8 +89,8 @@ class ProjectsEndpoint:
 
     def create(
         self, name: str,
-        access: Union[Access, str] = Access.PRIVATE,
-        data: Optional[dict[str, Any]] = None,
+        access: Access | str = Access.PRIVATE,
+        data: dict[str, Any] | None = None,
     ) -> Project:
         """Create a project.
 
@@ -111,7 +111,7 @@ class ProjectsEndpoint:
 
     def duplicate(
         self, id: str, name: str,
-        access: Union[Access, str] = Access.PRIVATE,
+        access: Access | str = Access.PRIVATE,
     ) -> Project:
         """Duplicate a project.
 
@@ -131,11 +131,11 @@ class ProjectsEndpoint:
 
     def update(
         self,
-        id: Optional[str] = None,
-        name: Optional[str] = None,
-        access: Optional[Union[Access, str]] = None,
-        data: Optional[dict[str, Any]] = None,
-        graph: Optional[dict[str, Any]] = None,
+        id: str | None = None,
+        name: str | None = None,
+        access: Access | str | None = None,
+        data: dict[str, Any] | None = None,
+        graph: dict[str, Any] | None = None,
     ) -> Project:
         """Update a project.
 

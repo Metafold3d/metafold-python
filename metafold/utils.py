@@ -1,12 +1,11 @@
 from numpy.typing import ArrayLike
 from scipy.spatial.transform import Rotation as R  # type: ignore
-from typing import Optional
 import numpy as np
 
 
 def xform(
-    translation: Optional[ArrayLike] = None,
-    rotation: Optional[ArrayLike] = None,
+    translation: ArrayLike | None = None,
+    rotation: ArrayLike | None = None,
 ) -> np.ndarray:
     """Compose transformation matrix.
 

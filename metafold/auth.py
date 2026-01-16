@@ -1,7 +1,6 @@
 from auth0.authentication import GetToken  # type: ignore
 from collections import namedtuple
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 Token = namedtuple("Token", ["access_token", "expires_at"])
 
@@ -23,7 +22,7 @@ class AuthProvider:
             self._client_id,
             client_secret=client_secret,
         )
-        self._token: Optional[Token] = None
+        self._token: Token | None = None
 
     def get_token(self) -> str:
         now = datetime.now(timezone.utc)

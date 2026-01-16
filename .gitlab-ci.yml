@@ -1,0 +1,31 @@
+---
+stages:
+- test
+
+default:
+  image: ghcr.io/astral-sh/uv:python3.12-alpine
+
+lint:
+  stage: test
+  script:
+  - uvx ruff check --output-format gitlab . > gl-code-quality-report.json
+  artifacts:
+    reports:
+      codequality: gl-code-quality-report.json
+
+type check:
+  stage: test
+  script:
+  - uv run --locked mypy ./metafold
+
+test:
+  stage: test
+  script:
+  - uv run --locked pytest --junitxml=pytest.xml ./tests
+  artifacts:
+    when: always
+    paths:
+    - pytest.xml
+    reports:
+      junit: pytest.xml
+...

@@ -14,7 +14,7 @@ import argparse
 import os
 import sys
 
-Vec3: TypeAlias = [float, float, float]
+Vec3: TypeAlias = list[float]
 
 
 class Patch(TypedDict):

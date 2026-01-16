@@ -1,7 +1,7 @@
 from metafold.auth import AuthProvider
 from metafold.exceptions import PollTimeout
 from requests import HTTPError, Response, Session
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 from urllib.parse import urljoin
 import platform
 import time
@@ -13,9 +13,9 @@ class Client:
     def __init__(
         self,
         base_url: str,
-        access_token: Optional[str] = None,
-        project_id: Optional[str] = None,
-        auth: Optional[AuthProvider] = None
+        access_token: str | None = None,
+        project_id: str | None = None,
+        auth: AuthProvider | None = None
     ) -> None:
         if bool(auth) == bool(access_token):
             raise ValueError(
@@ -34,7 +34,7 @@ class Client:
                 "Authorization": f"Bearer {access_token}",
             })
 
-    def project_id(self, id: Optional[str] = None) -> str:
+    def project_id(self, id: str | None = None) -> str:
         id = id or self._default_project
         if not id:
             raise ValueError(
@@ -79,8 +79,8 @@ class Client:
 
     def poll(
         self, url: str,
-        timeout: Union[int, float] = 120,
-        every: Union[int, float] = 1,
+        timeout: int | float = 120,
+        every: int | float = 1,
         ) -> Response:
         """Poll the given URL in regular intervals.
 

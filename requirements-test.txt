@@ -1,9 +1,6 @@
--r requirements.txt
 mypy
-networkx
 pytest
 requests-toolbelt
 ruff
-types-networkx
 types-requests
 typing_extensions

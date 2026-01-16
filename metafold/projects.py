@@ -3,7 +3,6 @@ from datetime import datetime
 from enum import Enum
 from metafold.api import asdatetime, asdict
 from metafold.client import Client
-from metafold.func_types import Graph
 from requests import Response
 from typing import Any, Optional, Union
 
@@ -48,7 +47,7 @@ class Project:
     modified: datetime = field(converter=asdatetime)
     thumbnail: Optional[str] = None
     project: Optional[dict[str, Any]] = None
-    graph: Optional[Graph] = None
+    graph: Optional[dict[str, Any]] = None
 
 
 class ProjectsEndpoint:
@@ -136,7 +135,7 @@ class ProjectsEndpoint:
         name: Optional[str] = None,
         access: Optional[Union[Access, str]] = None,
         data: Optional[dict[str, Any]] = None,
-        graph: Optional[Graph] = None,
+        graph: Optional[dict[str, Any]] = None,
     ) -> Project:
         """Update a project.
 

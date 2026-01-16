@@ -53,10 +53,6 @@ test = [
     "pytest~=7.3",
     "requests-toolbelt~=1.0",
 ]
-networkx = [
-    "networkx~=3.2",
-    "types-networkx~=3.2",
-]
 
 [tool.setuptools]
 packages = ["metafold"]

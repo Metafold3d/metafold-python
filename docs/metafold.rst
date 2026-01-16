@@ -46,14 +46,6 @@ metafold.client module
    :members:
    :show-inheritance:
 
-metafold.func module
---------------------
-
-.. automodule:: metafold.func
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 metafold.exceptions module
 --------------------------
 

@@ -33,7 +33,7 @@ metafold.jobs module
    :show-inheritance:
 
 metafold.workflows module
---------------------
+-------------------------
 
 .. automodule:: metafold.workflows
    :members:

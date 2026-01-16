@@ -4,7 +4,7 @@ from metafold.api import asdatetime, asdict
 from metafold.client import Client
 from os import PathLike
 from requests import Response
-from typing import IO, Optional, Union
+from typing import IO
 import requests
 
 
@@ -29,7 +29,7 @@ class Asset:
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
     project_id: str
-    job_id: Optional[str] = None
+    job_id: str | None = None
 
 
 class AssetsEndpoint:
@@ -40,9 +40,9 @@ class AssetsEndpoint:
 
     def list(
         self,
-        sort: Optional[str] = None,
-        q: Optional[str] = None,
-        project_id: Optional[str] = None,
+        sort: str | None = None,
+        q: str | None = None,
+        project_id: str | None = None,
     ) -> list[Asset]:
         """List assets.
 
@@ -63,7 +63,7 @@ class AssetsEndpoint:
         r: Response = self._client.get(url, params=payload)
         return [Asset(**a) for a in r.json()]
 
-    def get(self, asset_id: str, project_id: Optional[str] = None) -> Asset:
+    def get(self, asset_id: str, project_id: str | None = None) -> Asset:
         """Get an asset.
 
         Args:
@@ -80,7 +80,7 @@ class AssetsEndpoint:
 
     def download(
         self, asset_id: str, f: IO[bytes],
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ):
         """Download an asset.
 
@@ -100,8 +100,8 @@ class AssetsEndpoint:
             f.close()
 
     def download_file(
-        self, asset_id: str, path: Union[str, PathLike],
-        project_id: Optional[str] = None,
+        self, asset_id: str, path: str | PathLike,
+        project_id: str | None = None,
     ):
         """Download an asset.
 
@@ -114,8 +114,8 @@ class AssetsEndpoint:
             self.download(asset_id, f, project_id)
 
     def create(
-        self, f: Union[str, bytes, PathLike, IO[bytes]],
-        project_id: Optional[str] = None,
+        self, f: str | bytes | PathLike | IO[bytes],
+        project_id: str | None = None,
     ) -> Asset:
         """Upload an asset.
 
@@ -135,7 +135,7 @@ class AssetsEndpoint:
             fp.close()
         return Asset(**r.json())
 
-    def delete(self, asset_id: str, project_id: Optional[str] = None) -> None:
+    def delete(self, asset_id: str, project_id: str | None = None) -> None:
         """Delete an asset.
 
         Args:
@@ -147,7 +147,7 @@ class AssetsEndpoint:
         self._client.delete(url)
 
 
-def _open_file(f: Union[str, bytes, PathLike, IO[bytes]]) -> IO[bytes]:
+def _open_file(f: str | bytes | PathLike | IO[bytes]) -> IO[bytes]:
     if isinstance(f, (str, bytes, PathLike)):
         return open(f, "rb")
     return f

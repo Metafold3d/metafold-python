@@ -4,7 +4,6 @@ from metafold.assets import AssetsEndpoint
 from metafold.jobs import JobsEndpoint
 from metafold.workflows import WorkflowsEndpoint
 from metafold.auth import AuthProvider
-from typing import Optional
 
 
 class MetafoldClient(Client):
@@ -22,10 +21,10 @@ class MetafoldClient(Client):
 
     def __init__(
         self,
-        access_token: Optional[str] = None,
-        project_id: Optional[str] = None,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
+        access_token: str | None = None,
+        project_id: str | None = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
         auth_domain: str = "metafold3d.us.auth0.com",
         base_url: str = "https://api.metafold3d.com/",
     ) -> None:

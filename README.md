@@ -7,7 +7,7 @@
 
 ## Installation
 
-```
+```console
 pip install metafold
 ```
 
@@ -32,3 +32,13 @@ Read the [documentation][] for more info or play around with one of the
 [examples](examples).
 
 [documentation]: https://Metafold3d.github.io/metafold-python/
+
+## Development
+
+This project uses [uv](https://docs.astral.sh/uv/) to manage dependencies.
+
+### Run tests
+
+```console
+uv run pytest ./tests
+```

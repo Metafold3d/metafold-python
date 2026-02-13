@@ -18,7 +18,7 @@ dependencies = [
 readme = "README.md"
 license = {file = "LICENSE"}
 description = "Metafold SDK for Python"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = ["metafold", "api", "sdk", "implicit geometry"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -26,7 +26,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -40,18 +39,15 @@ Documentation = "https://metafold3d.github.io/metafold-python/"
 Repository = "https://github.com/Metafold3d/metafold-python.git"
 Issues = "https://github.com/Metafold3d/metafold-python/issues"
 
-[project.optional-dependencies]
-docs = [
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "requests-toolbelt>=1.0.0",
+    "ruff>=0.14.13",
     "sphinx~=7.2",
-    "sphinx_rtd_theme~=2.0",
-]
-lint = [
-    "mypy~=1.10",
-    "types-requests~=2.31",
-]
-test = [
-    "pytest~=7.3",
-    "requests-toolbelt~=1.0",
+    "sphinx-rtd-theme~=2.0",
+    "types-requests>=2.32.4.20260107",
 ]
 
 [tool.setuptools]
@@ -59,3 +55,7 @@ packages = ["metafold"]
 
 [tool.ruff.lint]
 select = ["NPY201"]
+
+[tool.pytest.ini_options]
+pythonpath = "."
+junit_suite_name = "metafold"

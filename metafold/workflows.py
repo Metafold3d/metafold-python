@@ -6,7 +6,7 @@ from metafold.client import Client
 from metafold.exceptions import PollTimeout
 from metafold.jobs import Job
 from requests import Response
-from typing import Optional, Union, cast
+from typing import cast
 import typing
 
 if typing.TYPE_CHECKING:
@@ -31,18 +31,18 @@ class Workflow:
     _jobs: dict[str, str] = field(factory=dict, init=False)
 
     id: str
-    link: Optional[str] = None
+    link: str | None = None
     jobs: list[str] = field(factory=list)
     state: str
     created: datetime = field(converter=asdatetime)
-    started: Optional[datetime] = field(
+    started: datetime | None = field(
         converter=lambda v: optional_datetime(v), default=None)
-    finished: Optional[datetime] = field(
+    finished: datetime | None = field(
         converter=lambda v: optional_datetime(v), default=None)
     definition: str
     project_id: str
 
-    def get_asset(self, path: str) -> Union[Asset, None]:
+    def get_asset(self, path: str) -> Asset | None:
         """Retrieve an asset from the workflow by dot notation.
 
         Args:
@@ -58,7 +58,7 @@ class Workflow:
                 return asset
         return None
 
-    def get_parameter(self, path: str) -> Union[str, None]:
+    def get_parameter(self, path: str) -> str | None:
         """Retrieve a parameter from the workflow by dot notation.
 
         Args:
@@ -74,7 +74,7 @@ class Workflow:
                 return param
         return None
 
-    def _find_job(self, name: str) -> Union[Job, None]:
+    def _find_job(self, name: str) -> Job | None:
         # FIXME(ryan): Update API to return job names as well as IDs.
         # For now we cache a mapping b/w job name and job id.
         if job_id := self._jobs.get(name):
@@ -101,9 +101,9 @@ class WorkflowsEndpoint:
 
     def list(
         self,
-        sort: Optional[str] = None,
-        q: Optional[str] = None,
-        project_id: Optional[str] = None,
+        sort: str | None = None,
+        q: str | None = None,
+        project_id: str | None = None,
     ) -> list[Workflow]:
         """List jobs.
 
@@ -123,7 +123,7 @@ class WorkflowsEndpoint:
         r: Response = self._client.get(url, params=payload)
         return [Workflow(client=cast("MetafoldClient", self._client), **w) for w in r.json()]
 
-    def get(self, workflow_id: str, project_id: Optional[str] = None) -> Workflow:
+    def get(self, workflow_id: str, project_id: str | None = None) -> Workflow:
         """Get a workflow.
 
         Args:
@@ -140,10 +140,10 @@ class WorkflowsEndpoint:
 
     def run(
         self, definition: str,
-        parameters: Optional[dict[str, str]] = None,
-        assets: Optional[dict[str, str]] = None,
-        timeout: Union[int, float] = 120,
-        project_id: Optional[str] = None,
+        parameters: dict[str, str] | None = None,
+        assets: dict[str, str] | None = None,
+        timeout: int | float = 120,
+        project_id: str | None = None,
     ) -> Workflow:
         """Dispatch a new workflow and wait for it to complete.
 
@@ -162,7 +162,7 @@ class WorkflowsEndpoint:
         """
         w = self.run_async(definition, parameters, assets, project_id)
         try:
-            r = self._client.poll(w.link, timeout)
+            r = self._client.poll(cast(str, w.link), timeout)
         except PollTimeout as e:
             raise RuntimeError(
                 f"Workflow failed to complete within {timeout} seconds"
@@ -171,9 +171,9 @@ class WorkflowsEndpoint:
 
     def run_async(
         self, definition: str,
-        parameters: Optional[dict[str, str]] = None,
-        assets: Optional[dict[str, str]] = None,
-        project_id: Optional[str] = None,
+        parameters: dict[str, str] | None = None,
+        assets: dict[str, str] | None = None,
+        project_id: str | None = None,
     ) -> Workflow:
         """Dispatch a new workflow and return immediately without waiting for result.
 
@@ -191,7 +191,7 @@ class WorkflowsEndpoint:
         r: Response = self._client.post(f"/projects/{project_id}/workflows", json=payload)
         return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
-    def cancel(self, workflow_id: str, project_id: Optional[str] = None) -> Workflow:
+    def cancel(self, workflow_id: str, project_id: str | None = None) -> Workflow:
         """Cancel a running workflow.
 
         Args:
@@ -206,7 +206,7 @@ class WorkflowsEndpoint:
         r: Response = self._client.post(url)
         return Workflow(client=cast("MetafoldClient", self._client), **r.json())
 
-    def delete(self, workflow_id: str, project_id: Optional[str] = None):
+    def delete(self, workflow_id: str, project_id: str | None = None):
         """Delete a workflow.
 
         Args:

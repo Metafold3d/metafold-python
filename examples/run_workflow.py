@@ -4,7 +4,6 @@ from metafold import MetafoldClient
 from multiprocessing import Pool
 from pathlib import Path
 from pprint import pprint
-from typing import Optional
 import json
 import os
 import sys
@@ -13,8 +12,8 @@ import sys
 def run_workflow(
         m: MetafoldClient,
         definition: str,
-        assets: Optional[dict[str, str]] = None,
-        params: Optional[dict[str, str]] = None,
+        assets: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
         timeout: int = 5 * 60):
     print("Running workflow…")
     w = m.workflows.run(definition, assets=assets, parameters=params, timeout=timeout)

@@ -1,6 +1,0 @@
-mypy
-pytest
-requests-toolbelt
-ruff
-types-requests
-typing_extensions

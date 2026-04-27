@@ -18,7 +18,7 @@ jobs:
           version: "0.9.26"
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync --locked
+        run: uv sync --extra simulation
       - run: uvx ruff check --output-format=github .
       - run: uv run mypy ./metafold
       - name: Test with pytest

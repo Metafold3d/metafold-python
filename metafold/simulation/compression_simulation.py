@@ -1,0 +1,1737 @@
+import copy
+from dataclasses import dataclass, field
+from enum import Enum
+from shutil import copyfileobj
+from typing import Any, Optional, Union
+from dotenv import load_dotenv
+from io import BytesIO
+
+import yaml
+from metafold import MetafoldClient
+from metafold_graph.func import *
+from metafold_graph.func import to_dict
+from metafold_graph.func_types import Asset
+from pathlib import Path
+from numpy.typing import DTypeLike
+from simulation_configurator import (
+    Simulation,
+    Grid,
+    BoundaryConditions,
+    GeometryStore,
+    Archive,
+    Contact,
+    Mpm,
+)
+from simulation_configurator.shapes import Box, File, Cylinder, Parallelepiped
+from plyfile import PlyData, PlyElement
+from tempfile import TemporaryDirectory
+from time import sleep
+from xml.etree import ElementTree
+from zipfile import ZipFile
+import json
+import numpy as np
+import os
+import pandas as pd
+
+from metafold.materials import (
+    DEFAULT_PISTON_MATERIAL,
+    DEFAULT_SUPPORT_MATERIAL,
+    Material,
+)
+from metafold.utils import sha256_file
+from metafold.workflows import Workflow
+
+
+DEFAULT_PISTON_VELOCITY = [
+    [0.000000, 0, 0, 0.0000000],
+    [0.000666, 0, 0, -0.8750000],
+    [0.002000, 0, 0, -1.2500000],
+    [0.004666, 0, 0, -1.3500000],
+    [0.006666, 0, 0, -1.7500000],
+    [0.010000, 0, 0, -2.1000000],
+    [0.010666, 0, 0, -2.0000000],
+    [0.012000, 0, 0, -1.9000000],
+    [0.017334, 0, 0, -0.9000000],
+    [0.020000, 0, 0, 0.0000000],
+    [0.021334, 0, 0, 0.4084350],
+    [0.023466, 0, 0, 1.0169675],
+    [0.029334, 0, 0, 1.9527605],
+    [0.032000, 0, 0, 1.8673950],
+    [0.033334, 0, 0, 1.7003345],
+    [0.034666, 0, 0, 1.4592990],
+    [0.037334, 0, 0, 0.7984375],
+    [0.040000, 0, 0, 0.0000000],
+]
+
+ZERO_VELOCITY = [
+    [0.000, 0.0, 0.0, 0.0],
+    [1.000, 0.0, 0.0, 0.0],
+]
+
+
+@dataclass
+class SimulationParameters:
+    init_time: float = 0.0
+    output_int: float = 0.002
+    max_time: float = 0.04
+    delt_min: float = 0.0
+    delt_max: float = 0.001
+    timestep_multiplier: float = 0.25
+    max_resolution: float = 512
+    force_displacement_shift_mm: float = 0.0
+
+    margin_xy: float = 0.01
+    margin_z: float = 0.025
+
+    points_per_cell: int = 2
+    extra_cells: list[int] = field(default_factory=lambda: [1, 1, 1])
+    patches: list[int] = field(default_factory=lambda: [4, 2, 2])
+
+
+@dataclass
+class ExperimentPart:
+    name: str
+    material: Material
+
+
+@dataclass
+class ExperimentMesh(ExperimentPart):
+    filename: str = ""
+    representative_part: bool = False
+
+
+@dataclass
+class ExperimentPrimitive(ExperimentPart):
+    shape_parameters: dict = field(default_factory=dict)
+
+    def get_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return (min, max) axis-aligned bounding box in metres.
+        Override in concrete shape subclasses."""
+        raise NotImplementedError(f"{type(self).__name__} must implement get_bounds()")
+
+
+@dataclass
+class ExperimentCylinder(ExperimentPrimitive):
+    shape_parameters: dict = field(
+        default_factory=lambda: {
+            "top": [-0.001, 0.055, 0.045],
+            "bottom": [-0.001, 0.055, 0.065],
+            "radius": 0.020,
+        }
+    )
+
+    def get_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        top = np.array(self.shape_parameters["top"], dtype=np.float32)
+        bot = np.array(self.shape_parameters["bottom"], dtype=np.float32)
+        r = self.shape_parameters["radius"]
+        return np.minimum(top, bot) - r, np.maximum(top, bot) + r
+
+
+@dataclass
+class ExperimentBox(ExperimentPrimitive):
+    shape_parameters: dict = field(
+        default_factory=lambda: {
+            "min": [-0.001, -0.001, -0.001],
+            "max": [0.001, 0.001, 0.001],
+        }
+    )
+
+    def get_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        return (
+            np.array(self.shape_parameters["min"], dtype=np.float32),
+            np.array(self.shape_parameters["max"], dtype=np.float32),
+        )
+
+
+@dataclass
+class ExperimentParallelepiped(ExperimentPrimitive):
+    shape_parameters: dict = field(
+        default_factory=lambda: {
+            "p1": [-0.025399, 0.114013, -0.001500],
+            "p2": [0.024442, 0.110025, -0.001500],
+            "p3": [-0.024442, 0.125975, -0.001500],
+            "p4": [-0.025399, 0.114013, -0.025],
+        }
+    )
+
+    def get_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        pts = np.stack(
+            [
+                np.array(self.shape_parameters[k], dtype=np.float32)
+                for k in ("p1", "p2", "p3", "p4")
+            ]
+        )
+        return pts.min(axis=0), pts.max(axis=0)
+
+
+@dataclass
+class ExperimentPistonBase:
+    velocity: Optional[list] = field(default_factory=lambda: DEFAULT_PISTON_VELOCITY)
+    contact_type: str = "specified"
+    mu: float = 0.0
+
+
+@dataclass
+class ExperimentPistonMesh(ExperimentMesh, ExperimentPistonBase):
+    name: str = "piston"
+    material: Material = field(default_factory=lambda: DEFAULT_PISTON_MATERIAL)
+    filename: str = "piston.ply"
+
+
+@dataclass
+class ExperimentPistonCylinder(ExperimentCylinder, ExperimentPistonBase):
+    name: str = "piston"
+    material: Material = field(default_factory=lambda: DEFAULT_PISTON_MATERIAL)
+
+
+@dataclass
+class ExperimentPistonBox(ExperimentBox, ExperimentPistonBase):
+    name: str = "piston"
+    material: Material = field(default_factory=lambda: DEFAULT_PISTON_MATERIAL)
+
+
+@dataclass
+class ExperimentSupportBase:
+    name: str = "support"
+    velocity: Optional[list] = field(default_factory=lambda: ZERO_VELOCITY)
+    contact_type: str = "specified_friction"
+    mu: float = 0.1
+
+
+@dataclass
+class ExperimentSupportMesh(ExperimentMesh, ExperimentSupportBase):
+    material: Material = field(default_factory=lambda: DEFAULT_SUPPORT_MATERIAL)
+
+
+@dataclass
+class ExperimentSupportCylinder(ExperimentCylinder, ExperimentSupportBase):
+    material: Material = field(default_factory=lambda: DEFAULT_SUPPORT_MATERIAL)
+
+
+@dataclass
+class ExperimentSupportBox(ExperimentBox, ExperimentSupportBase):
+    material: Material = field(default_factory=lambda: DEFAULT_SUPPORT_MATERIAL)
+
+
+@dataclass
+class ExperimentSupportParallelepiped(ExperimentParallelepiped, ExperimentSupportBase):
+    material: Material = field(default_factory=lambda: DEFAULT_SUPPORT_MATERIAL)
+
+
+@dataclass
+class ReferenceData:
+    csv_path: Path = Path("")
+    curve_zip_path: Path = Path("reference/reference.csv")
+    loading_energy = 17.65
+    unloading_energy = 12.60
+    energy_absorbed = 5.06
+    volume = 853000.0
+
+
+class WorkflowStepType(Enum):
+    COMPUTE_BVH = "compute_bvh"
+    METRICS = "metrics"
+    COMPRESS = "compress"
+    VON_MISES_STRESS = "von_mises_stress"
+    EFFECTIVE_STRAIN = "effective_strain"
+    FORCE_DISPLACEMENT = "force_displacement"
+    STRESS_STRAIN = "stress_strain"
+    PARTICLE_DISPLACEMENT = "particle_displacement"
+
+
+class WorkflowStep:
+    type: WorkflowStepType
+    part_names: list[str]
+
+    def __init__(self, type: Union[WorkflowStepType, str], *part_names):
+        self.type = WorkflowStepType(type) if isinstance(type, str) else type
+        if len(part_names) == 1 and isinstance(part_names[0], list):
+            self.part_names = part_names[0]
+        else:
+            self.part_names = list(part_names)
+
+        # validate
+        if self.part_names and self.type in [
+            WorkflowStepType.STRESS_STRAIN,
+            WorkflowStepType.FORCE_DISPLACEMENT,
+        ]:
+            raise ValueError(
+                f"Specifying part_names is not supported for type {self.type.value}"
+            )
+
+
+class CompressionSimulation:
+    @dataclass
+    class PartInfo:
+        part: ExperimentPart
+        file_path: Optional[Path] = None
+        asset: Optional[Asset] = None
+        # Filename of the volume asset produced by sample-mesh in the prep
+        # workflow. Downstream main-workflow jobs (metrics, compress) consume
+        # this directly as an asset by filename.
+        volume_filename: Optional[str] = None
+        patch: dict = field(default_factory=dict)
+        jobs: dict[str, Any] = field(default_factory=lambda: {})
+        part_unique_name = ""
+        material_index: int = 0
+        material_name: str = ""
+
+        def to_state_dict(self) -> dict:
+            return {
+                "part_unique_name": self.part_unique_name,
+                "material_index": self.material_index,
+                "material_name": self.material_name,
+                "jobs": self.jobs,
+                "is_piston": isinstance(self.part, ExperimentPistonBase),
+                "part_name": self.part.name,
+            }
+
+        def restore_from_state_dict(self, saved: dict):
+            self.part_unique_name = saved["part_unique_name"]
+            self.material_index = saved["material_index"]
+            self.material_name = saved["material_name"]
+            self.jobs = saved["jobs"]
+
+    client: MetafoldClient
+    project_id: str = ""
+    stl_folder: Optional[Path] = None
+    out_dir: Optional[Path] = None
+    results: list = []
+    representative_part: str = ""
+    simulation_name: str = ""
+    simulation_parameters: SimulationParameters
+    piston_velocity: list[list[float]]
+
+    force_reupload_files: bool = False
+
+    reference_data: ReferenceData
+
+    ups: Optional[Any] = None
+    manifest: dict = {}
+
+    part_infos: list[PartInfo]
+
+    workflow_steps: list[WorkflowStep]
+    workflow_yaml: str = ""
+    workflow_jobs: dict[str, dict] = {}
+    workflow_params: dict[str, Any] = {}
+    workflow_assets: dict[str, Any] = {}
+    workflow: Optional[Workflow] = None
+
+
+    prep_workflows: list[Workflow] = []
+    prep_workflow_batch_size: int = 10
+
+    def __init__(
+        self,
+        parts: list[ExperimentPart],
+        simulation_name: str,
+        project_id: str = "",
+        stl_folder_path: str = "PLY",
+        env_source: str = ".env.dev",
+        output_path: str = "data",
+        client: Optional[MetafoldClient] = None,
+        simulation_parameters: SimulationParameters = SimulationParameters(),
+        reference_data: ReferenceData = ReferenceData(),
+        workflow_steps: list[Union[WorkflowStep, tuple, WorkflowStepType, str]] = [
+            WorkflowStep(WorkflowStepType.COMPUTE_BVH),
+            WorkflowStep(WorkflowStepType.METRICS),
+            WorkflowStep(WorkflowStepType.COMPRESS),
+            WorkflowStep(WorkflowStepType.VON_MISES_STRESS),
+            WorkflowStep(WorkflowStepType.EFFECTIVE_STRAIN),
+            WorkflowStep(WorkflowStepType.FORCE_DISPLACEMENT),
+            WorkflowStep(WorkflowStepType.STRESS_STRAIN),
+            WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
+        ],
+        force_reupload_files=False,
+        prep_workflow_batch_size: int = 10,
+    ):
+        self.simulation_name = simulation_name
+        self.simulation_parameters = simulation_parameters
+        self.reference_data = reference_data
+        self.workflow_steps = self._clean_workflow_steps_input(workflow_steps)
+        self.force_reupload_files = force_reupload_files
+        self.prep_workflow_batch_size = prep_workflow_batch_size
+
+        # build the parts list
+        self.part_infos = []
+        for part in parts:
+            inner_part = CompressionSimulation.PartInfo(part)
+            inner_part.part_unique_name = part.name
+            if isinstance(part, ExperimentPistonBase):
+                # pistons have to go first
+                self.part_infos.insert(0, inner_part)
+            else:
+                self.part_infos.append(inner_part)
+
+        self.validate_parts()
+        self.setup_ply_files(stl_folder_path)
+        self.setup_results(output_path)
+        if client is None:
+            self.client = self.setup_client(env_source, project_id)
+        else:
+            self.client = client
+
+    @staticmethod
+    def _clean_workflow_steps_input(workflow_steps_in: list):
+        workflow_steps = []
+        for step_in in workflow_steps_in:
+            if isinstance(step_in, WorkflowStep):
+                step = step_in
+            elif isinstance(step_in, WorkflowStepType):
+                step = WorkflowStep(type=step_in)
+            elif isinstance(step_in, str):
+                step = WorkflowStep(type=WorkflowStepType(step_in))
+            elif isinstance(step_in, tuple):
+                step = WorkflowStep(*step_in)
+            else:
+                raise ValueError(f"Unknown value in workflow_steps {step}")
+            workflow_steps.append(step)
+        return workflow_steps
+
+    def prepare(self):
+        self.populate_assets()
+        self.sample_assets()
+        self.collect_sampled_volumes()
+        self.create_sim_config()
+        self.build_workflow()
+
+    def cancel(self):
+        for prep_workflow in self.prep_workflows:
+            if prep_workflow.state not in ["success", "failure", "canceled"]:
+                self.client.workflows.cancel(prep_workflow.id)
+        self.prep_workflows = []
+
+        if self.workflow is not None and self.workflow.state not in [
+            "success",
+            "failure",
+            "canceled",
+        ]:
+            self.client.workflows.cancel(self.workflow.id)
+            self.workflow = None
+
+    def run(self):
+        if not self.workflow_yaml:
+            self.prepare()
+        self.run_workflow()
+
+    def download_results(self):
+        self.write_results()
+
+    def validate_parts(self):
+        for p in self.part_infos:
+            if hasattr(p.part, "representative_part") and p.part.representative_part:
+                if self.representative_part:
+                    raise ValueError(
+                        f"At most one part can have representative_part set to True"
+                    )
+                self.representative_part = p.part.name
+        if not self.representative_part:
+            raise ValueError(f"One part must have representative_part set to True")
+
+    def setup_results(self, output_path):
+        self.out_dir = Path(output_path)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.results = []
+        self.reload_results()
+
+    @property
+    def results_filename(self) -> Path:
+        assert self.out_dir is not None
+        return self.out_dir / f"{self.simulation_name}_results.json"
+
+    def _save_results(self):
+        state = {
+            "results": self.results,
+            "part_infos": [p.to_state_dict() for p in self.part_infos],
+        }
+        with open(self.results_filename, "w") as f:
+            json.dump(state, f, indent=2)
+
+    def reload_results(self):
+        """Reload persisted results and part-info state from disk if the
+        results file exists."""
+        self.results = []
+        if not self.results_filename.is_file():
+            return
+        with open(self.results_filename) as f:
+            state = json.load(f)
+
+        # Back-compat: if the file is a bare list, it's pre-state-save
+        if isinstance(state, list):
+            self.results = state
+            return
+
+        self.results = state.get("results", [])
+        saved_parts = state.get("part_infos", [])
+        # Restore part_info fields by matching on part_name
+        for saved in saved_parts:
+            for p in self.part_infos:
+                if p.part.name == saved["part_name"]:
+                    p.restore_from_state_dict(saved)
+                    break
+
+    def setup_client(self, env_source, project_id) -> MetafoldClient:
+        load_dotenv(env_source)
+
+        if not project_id:
+            self.project_id = os.environ["METAFOLD_PROJECT_ID"]
+        else:
+            self.project_id = project_id
+
+        self.client = MetafoldClient(
+            project_id=self.project_id,
+            client_id=os.environ["METAFOLD_CLIENT_ID"],
+            client_secret=os.environ["METAFOLD_CLIENT_SECRET"],
+            auth_domain=os.environ["METAFOLD_AUTH_DOMAIN"],
+            base_url=os.environ["METAFOLD_BASE_URL"],
+        )
+        return self.client
+
+    @staticmethod
+    def _resolve_stl_path(stl_filename: str, stl_folder_path: Path, name: str) -> Path:
+        p = Path(stl_filename)
+
+        # If it has an extension, resolve it directly
+        if p.suffix:
+            candidate = p if p.is_absolute() else stl_folder_path / p
+            if candidate.is_file():
+                return candidate
+            raise ValueError(f"STL file for part '{name}' not found: {candidate}")
+
+        # No extension — try both, prefer .ply
+        base = p if p.is_absolute() else stl_folder_path / p
+        ply = base.with_suffix(".ply")
+        stl = base.with_suffix(".stl")
+
+        if ply.is_file():
+            return ply
+        if stl.is_file():
+            return stl
+
+        raise ValueError(f"STL file for part '{name}' not found: {base}(.ply/.stl)")
+
+    def resolve_file_path(self, part_info):
+        if hasattr(part_info.part, "filename"):
+            part_info.file_path = self._resolve_stl_path(
+                part_info.part.filename, self.stl_folder, part_info.part_unique_name
+            )
+            # just in case we had a fully or partially specified filename, clean it up here
+            part_info.part.filename = part_info.file_path.name
+
+    def setup_ply_files(self, stl_folder_path):
+        # Folder containing your STL files
+        self.stl_folder = Path(stl_folder_path).resolve()
+
+        for p in self.part_infos:
+            self.resolve_file_path(p)
+
+    def populate_assets(self, part_infos=None):
+        if part_infos is None:
+            part_infos = self.part_infos
+
+        for info in part_infos:
+            if info.file_path and info.asset is None:
+                existing = self.client.assets.list(q=f"filename:{info.part.filename}")
+                asset = None
+                if existing:
+                    asset = existing[0]
+                    checksum = sha256_file(info.file_path)
+                    if asset.checksum != checksum or self.force_reupload_files:
+                        # file has changed so replace it
+                        self.client.assets.delete(asset_id=asset.id)
+                        asset = None
+                if asset is None:
+                    asset = self.client.assets.create(str(info.file_path))
+                info.asset = asset
+
+    def _build_prep_workflow_for_batch(self, batch: list) -> tuple[str, dict, dict]:
+        """Build the YAML, params, and assets for one batch of part_infos."""
+        jobs: dict = {}
+        params: dict = {}
+        assets: dict = {}
+
+        for part_info in batch:
+            if not hasattr(part_info.part, "filename"):
+                continue
+            unique_name = part_info.part_unique_name
+
+            preprocess_job = f"preprocess-mesh-{unique_name}"
+            jobs[preprocess_job] = {"type": "mesh/preprocess"}
+            assets[f"{preprocess_job}.mesh"] = part_info.part.filename
+            part_info.jobs["preprocess-mesh"] = preprocess_job
+
+            compute_bvh_job = ""
+            if self._get_step(WorkflowStepType.COMPUTE_BVH, part_info.part.name):
+                compute_bvh_job = f"compute-bvh-{unique_name}"
+                jobs[compute_bvh_job] = {
+                    "type": "mesh/compute-bvh",
+                    "needs": [preprocess_job],
+                    "assets": {"mesh": preprocess_job},
+                }
+                part_info.jobs["compute-bvh"] = compute_bvh_job
+
+            sample_mesh_job = f"sample-mesh-{unique_name}"
+            sample_mesh_def: dict = {
+                "type": "implicit/from-mesh",
+                "needs": [preprocess_job],
+                "assets": {"mesh": preprocess_job},
+            }
+            if compute_bvh_job:
+                sample_mesh_def["needs"].append(compute_bvh_job)
+                sample_mesh_def["assets"]["bvh"] = compute_bvh_job
+            jobs[sample_mesh_job] = sample_mesh_def
+
+            params[f"{sample_mesh_job}.resolution"] = (
+                f"{self.simulation_parameters.max_resolution}"
+            )
+            part_info.jobs["sample-mesh"] = sample_mesh_job
+
+        workflow_yaml = yaml.dump({"jobs": jobs}, default_flow_style=False)
+        return workflow_yaml, params, assets
+
+    def sample_assets(self, part_infos=None):
+        if part_infos is None:
+            part_infos = self.part_infos
+
+        mesh_parts = [p for p in part_infos if hasattr(p.part, "filename")]
+        batch_size = self.prep_workflow_batch_size
+        batches = [
+            mesh_parts[i : i + batch_size]
+            for i in range(0, max(len(mesh_parts), 1), batch_size)
+        ]
+
+        # Launch all batch workflows in parallel
+        self.prep_workflows = []
+        for batch in batches:
+            workflow_yaml, params, assets = self._build_prep_workflow_for_batch(batch)
+            wf = self.client.workflows.run_async(
+                workflow_yaml, parameters=params, assets=assets
+            )
+            self.prep_workflows.append(wf)
+
+        # Wait for all to finish
+        for i, wf in enumerate(self.prep_workflows):
+            while wf.state not in ["success", "failure", "canceled"]:
+                sleep(1)
+                wf = self.client.workflows.get(wf.id)
+            self.prep_workflows[i] = wf
+
+        failed = [wf for wf in self.prep_workflows if wf.state != "success"]
+        if failed:
+            raise RuntimeError(f"{len(failed)} prep workflow(s) failed")
+
+    def collect_sampled_volumes(self, part_infos=None):
+        if part_infos is None:
+            part_infos = self.part_infos
+
+        # Build a name → job lookup across all prep workflows so we can find
+        # the right job for each part regardless of which batch it ran in.
+        prep_workflow_jobs = {
+            job.name: job
+            for prep_workflow in self.prep_workflows
+            for job_id in prep_workflow.jobs
+            if (job := self.client.jobs.get(job_id)) is not None
+        }
+        for info in part_infos:
+            sample_job = prep_workflow_jobs.get(info.jobs.get("sample-mesh", ""), None)
+            if sample_job is None:
+                continue
+
+            # Patch info comes from the sample-mesh job's output params,
+            # describing the volume's size/offset/resolution in metres.
+            mesh_patch = sample_job.outputs.params
+            info.patch = {
+                "size": json.loads(mesh_patch["patch_size"]),
+                "offset": json.loads(mesh_patch["patch_offset"]),
+                "resolution": json.loads(mesh_patch["patch_resolution"]),
+            }
+
+            # The .bin file is the actual volume data we want downstream jobs
+            # to consume. Falls back to any non-empty filename in case the
+            # asset extension changes.
+            volume_asset = next(
+                (a for a in sample_job.assets if a.filename.endswith(".bin")), None
+            )
+            if volume_asset is None:
+                volume_asset = next(
+                    (a for a in sample_job.assets if a.filename), None
+                )
+            if volume_asset is not None:
+                info.volume_filename = volume_asset.filename
+
+    def get_part_info(self, name):
+        for info in self.part_infos:
+            if info.part.name == name:
+                return info
+        return None
+
+    def create_sim_config(self, name_suffix=""):
+        """
+        grid_patch: the midsole patch, used as representative for grid sizing.
+        Piston velocity is [0,0,0] in the UPS — actual motion driven by velocity.txt.
+        """
+        name = self.simulation_name
+        grid_patch = self.get_part_info(self.representative_part).patch
+
+        sim = Simulation(
+            name,
+            max_time=self.simulation_parameters.max_time,
+            init_time=self.simulation_parameters.init_time,
+            delt_min=self.simulation_parameters.delt_min,
+            delt_max=self.simulation_parameters.delt_max,
+            timestep_multiplier=self.simulation_parameters.timestep_multiplier,
+        )
+
+        grid_min = np.array(grid_patch["offset"], dtype=np.float32) * 1e-3
+        grid_max = np.array(grid_patch["size"], dtype=np.float32) * 1e-3 + grid_min
+        grid_min[:2] -= self.simulation_parameters.margin_xy
+        grid_max[:2] += self.simulation_parameters.margin_xy
+        grid_max[2] += self.simulation_parameters.margin_z
+
+        # Expand grid to contain every rigid primitive's bounding box
+        for info in self.part_infos:
+            part = info.part
+            if isinstance(part, ExperimentPrimitive):
+                pmin, pmax = part.get_bounds()
+                grid_min = np.minimum(grid_min, pmin)
+                grid_max = np.maximum(grid_max, pmax)
+
+        grid_size = grid_max - grid_min
+        spacing = (
+            np.array(grid_patch["size"], dtype=np.float32)
+            / (np.array(grid_patch["resolution"]) - 1)
+            * 1e-3
+        )
+        grid_resolution = np.ceil(
+            grid_size / (self.simulation_parameters.points_per_cell * spacing)
+        ).astype(np.int32)
+
+        grid = Grid(
+            {
+                "size": grid_size.tolist(),
+                "offset": grid_min.tolist(),
+                "resolution": grid_resolution.tolist(),
+                "extraCells": self.simulation_parameters.extra_cells,
+                "patches": self.simulation_parameters.patches,
+            }
+        )
+        grid.add(BoundaryConditions(fixed=True))
+
+        store = GeometryStore()
+
+        material_index = 0
+        for info in self.part_infos:
+            part = info.part
+            material_name = f"{info.part.name}{name_suffix}_mat"
+            info.material_name = material_name
+            info.material_index = material_index
+            material_dict = part.material.to_dict()
+            store.add_material(material_name, material_dict, force=True)
+            material_index += 1
+
+        for info in self.part_infos:
+            part = info.part
+            material_name = info.material_name
+            geometry_element = None
+            common_attribs = {
+                "material": material_name,
+                "res": [2, 2, 2],
+                "velocity": [
+                    0,
+                    0,
+                    0,
+                ],  # actual motion driven by velocity.txt via rigid contact
+                "temperature": 300,
+            }
+            element_name = f"{info.part.name}{name_suffix}"
+            # rigid parts (piston/support) get 1 or 2, deformable meshes get default
+            if isinstance(part, ExperimentPistonBase):
+                common_attribs["color"] = 1
+            elif isinstance(part, ExperimentSupportBase):
+                common_attribs["color"] = 2
+
+            if isinstance(part, ExperimentCylinder):
+                geometry_element = Cylinder(
+                    element_name, part.shape_parameters, **common_attribs
+                )
+            elif isinstance(part, ExperimentBox):
+                geometry_element = Box(
+                    element_name, part.shape_parameters, **common_attribs
+                )
+            elif isinstance(part, ExperimentParallelepiped):
+                geometry_element = Parallelepiped(
+                    element_name, part.shape_parameters, **common_attribs
+                )
+            elif isinstance(part, ExperimentMesh):
+                geometry_element = File(
+                    element_name, f"{element_name}.pts", **common_attribs
+                )
+            else:
+                raise RuntimeError(f"Unsupported part type: {type(part).__name__}")
+            store.add(geometry_element)
+
+        outputs_indices_key = ",".join(str(i) for i in range(len(self.part_infos)))
+        archive = Archive(
+            outputs={
+                outputs_indices_key: ["deformation_measure", "position", "stress"],
+                "all": [
+                    "boundary_force_zminus",
+                    "boundary_force_zplus",
+                    "rigid_reaction_force_0",
+                    "kinetic_energy",
+                    "strain_energy",
+                ],
+            },
+            output_interval=self.simulation_parameters.output_int,
+        )
+
+        # One rigid contact per rigid body (piston + each support).
+        # Each contact pairs that rigid body with all deformable parts.
+        deformable_indices = [
+            i
+            for i, info in enumerate(self.part_infos)
+            if not (
+                isinstance(info.part, ExperimentPistonBase)
+                or isinstance(info.part, ExperimentSupportBase)
+            )
+        ]
+
+        rigid_contacts = []
+        for info in self.part_infos:
+            if isinstance(info.part, (ExperimentPistonBase, ExperimentSupportBase)):
+                materials = [info.material_index] + deformable_indices
+                rigid_contacts.append(
+                    Contact(
+                        type="rigid",
+                        materials=materials,
+                        master_material=info.material_index,
+                        direction=[1, 1, 1],
+                    )
+                )
+
+        single_velocity_contact = Contact(
+            type="single_velocity",
+            materials=deformable_indices,
+        )
+
+        for c in rigid_contacts:
+            store.add_contact(c)
+        store.add_contact(single_velocity_contact)
+
+        mpm = Mpm(
+            time_integrator="explicit",
+            interpolator="fast_cpdi",
+            boundary_traction_faces="[zminus,zplus]",
+            DoExplicitHeatConduction="false",
+        )
+
+        sim.add([mpm, archive, store, grid])
+
+        # this stuff should be fixed laster, this is just a workaround
+        representative_material = self.get_part_info(
+            self.representative_part
+        ).part.material.to_dict()
+        viscoelastic_modes = representative_material["constitutive_model"]["params"][
+            "viscoelastic_series"
+        ]
+        self.ups = sim.to_xml()
+        self.ups = self._fix_viscoelastic_xml(self.ups, viscoelastic_modes)
+        self.ups = self._fix_contact_xml(self.ups)
+        ElementTree.indent(self.ups)
+
+    def _add_to_workflow_metrics(self, part_infos: list[PartInfo]):
+        for part_info in part_infos:
+            part = part_info.part
+            if not self._is_analysis_target(part):
+                continue
+            if not part_info.volume_filename:
+                continue
+            metrics_job_name = f"metrics-{part_info.part_unique_name}"
+            self.workflow_jobs[metrics_job_name] = {
+                "type": "implicit/metrics",
+            }
+            # Reference the prep volume directly as an asset
+            self.workflow_assets[f"{metrics_job_name}.volume"] = (
+                part_info.volume_filename
+            )
+            self.workflow_params[f"{metrics_job_name}.volume_size"] = json.dumps(
+                part_info.patch["size"]
+            )
+            self.workflow_params[f"{metrics_job_name}.volume_offset"] = json.dumps(
+                part_info.patch["offset"]
+            )
+            self.workflow_params[f"{metrics_job_name}.volume_resolution"] = json.dumps(
+                part_info.patch["resolution"]
+            )
+            part_info.jobs["metrics"] = metrics_job_name
+
+    def _add_to_workflow_compress(self, part_infos: list[PartInfo]):
+        compress_job_name = "compress"
+        # Only parts that have a volume go into the compress assets list
+        parts_with_volume = [p for p in part_infos if p.volume_filename]
+
+        self.workflow_jobs[compress_job_name] = {
+            "type": "sim/custom",
+        }
+
+        # compress.volume is a list of volume asset filenames in part order
+        self.workflow_assets[f"{compress_job_name}.volume"] = [
+            p.volume_filename for p in parts_with_volume
+        ]
+
+        volume_sizes = []
+        volume_offsets = []
+        volume_resolutions = []
+        for part_info in parts_with_volume:
+            volume_sizes.append(json.dumps(part_info.patch["size"]))
+            volume_offsets.append(json.dumps(part_info.patch["offset"]))
+            volume_resolutions.append(json.dumps(part_info.patch["resolution"]))
+            part_info.jobs["compress"] = compress_job_name
+
+        assert self.ups is not None
+        self.workflow_params[f"{compress_job_name}.ups"] = self._dump_xml(
+            self.ups, encoding="ISO-8859-1", xml_declaration=True
+        )
+        self.workflow_params[f"{compress_job_name}.volume_size"] = volume_sizes
+        self.workflow_params[f"{compress_job_name}.volume_offset"] = volume_offsets
+        self.workflow_params[f"{compress_job_name}.volume_resolution"] = (
+            volume_resolutions
+        )
+
+        # Each rigid body with a velocity array gets its own text file.
+        # Naming: "velocity_{part_name}.txt" — referenced by its contact element.
+        text_inputs = {}
+        for part_info in part_infos:
+            if (
+                hasattr(part_info.part, "velocity")
+                and part_info.part.velocity is not None
+            ):
+                text_inputs[f"velocity_{part_info.part_unique_name}.txt"] = (
+                    part_info.part.velocity
+                )
+        self.workflow_params[f"{compress_job_name}.text_inputs"] = json.dumps(
+            text_inputs
+        )
+
+    def _add_to_workflow_postprocess(
+        self,
+        part_infos: list[PartInfo],
+        input_job_name,
+        new_job_name_base,
+        material_key_param=None,
+    ):
+        new_job_type = f"sim/postprocess/{new_job_name_base}"
+        input_jobs = list(
+            dict.fromkeys(
+                p.jobs[input_job_name] for p in part_infos if input_job_name in p.jobs
+            )
+        )
+        job_index = 1
+        for input_job_name in input_jobs:
+            new_job_name = (
+                f"{new_job_name_base}{'' if job_index > 0 else str(job_index)}"
+            )
+            job_index += 1
+
+            self.workflow_jobs[new_job_name] = {
+                "type": new_job_type,
+                "needs": [input_job_name],
+                "assets": {"data": input_job_name},
+            }
+
+            # set the job on all the relevant parts
+            for part_info in part_infos:
+                if part_info.jobs.get(input_job_name, "") == input_job_name:
+                    part_info.jobs[new_job_name_base] = new_job_name
+
+        # include every material for the keys
+        if material_key_param:
+            material_key_values = [
+                f"/material{i}/{material_key_param}" for i in range(len(part_infos))
+            ]
+            self.workflow_params[f"{new_job_name_base}.keys"] = json.dumps(
+                material_key_values
+            )
+
+    def _get_piston_info(self):
+        piston_info = next(
+            (p for p in self.part_infos if isinstance(p.part, ExperimentPistonBase)),
+            None,
+        )
+        return piston_info
+
+    def _add_to_workflow_von_mises_stress(self, part_infos: list[PartInfo]):
+        self._add_to_workflow_postprocess(
+            part_infos, "compress", "von-mises-stress", "cauchy_stress"
+        )
+
+    def _add_to_workflow_effective_strain(self, part_infos: list[PartInfo]):
+        self._add_to_workflow_postprocess(
+            part_infos, "compress", "effective-strain", "deformation_gradient"
+        )
+
+    def _add_to_workflow_force_displacement(self, part_infos: list[PartInfo]):
+        job_name_base = "force-displacement"
+        self._add_to_workflow_postprocess(part_infos, "compress", job_name_base)
+        self.workflow_params[f"{job_name_base}.keys"] = json.dumps(
+            ["/boundary_force_zminus"]
+        )
+        self.workflow_params[f"{job_name_base}.method"] = "BoundaryForce"
+        # Find the piston part — there should be exactly one
+        piston_info = self._get_piston_info()
+        if piston_info and piston_info.part.velocity:
+            self.workflow_params[f"{job_name_base}.piston_velocity"] = json.dumps(
+                [
+                    [row[0], [row[1], row[2], row[3]]]
+                    for row in piston_info.part.velocity
+                ]
+            )
+
+    def _add_to_workflow_stress_strain(self, part_infos: list[PartInfo]):
+        job_name_base = "stress-strain"
+        self._add_to_workflow_postprocess(
+            part_infos, "force-displacement", job_name_base
+        )
+        self.workflow_params[f"{job_name_base}.keys"] = json.dumps(
+            ["/force_displacement"]
+        )
+        representative_patch = self.get_part_info(self.representative_part).patch
+        self.workflow_params[f"{job_name_base}.compression_area"] = str(
+            representative_patch["size"][0] * representative_patch["size"][1]
+        )
+        self.workflow_params[f"{job_name_base}.initial_length"] = str(
+            representative_patch["size"][2]
+        )
+
+    def _add_to_workflow_particle_displacement(self, part_infos: list[PartInfo]):
+        self._add_to_workflow_postprocess(
+            part_infos, "compress", "particle-displacement", "position"
+        )
+
+    def build_workflow(self, name_suffix=""):
+        self.workflow_yaml = ""
+        self.workflow_params = {}
+        self.workflow_jobs = {}
+        self.workflow_assets = {}
+
+        for step in self.workflow_steps:
+            try:
+                part_infos_for_step = (
+                    [self.get_part_info(p_name) for p_name in step.part_names]
+                    if step.part_names
+                    else self.part_infos
+                )
+            except KeyError as e:
+                raise RuntimeError(
+                    f"Unknown part name {e.args[0]} in workflow step {step.type.value}"
+                )
+            if step.type == WorkflowStepType.METRICS:
+                self._add_to_workflow_metrics(part_infos_for_step)
+            elif step.type == WorkflowStepType.COMPRESS:
+                self._add_to_workflow_compress(part_infos_for_step)
+            elif step.type == WorkflowStepType.VON_MISES_STRESS:
+                self._add_to_workflow_von_mises_stress(part_infos_for_step)
+            elif step.type == WorkflowStepType.EFFECTIVE_STRAIN:
+                self._add_to_workflow_effective_strain(part_infos_for_step)
+            elif step.type == WorkflowStepType.FORCE_DISPLACEMENT:
+                self._add_to_workflow_force_displacement(part_infos_for_step)
+            elif step.type == WorkflowStepType.STRESS_STRAIN:
+                self._add_to_workflow_stress_strain(part_infos_for_step)
+            elif step.type == WorkflowStepType.PARTICLE_DISPLACEMENT:
+                self._add_to_workflow_particle_displacement(part_infos_for_step)
+            elif step.type == WorkflowStepType.COMPUTE_BVH:
+                pass  # this is done on the prep workflow, not here
+
+        self.workflow_yaml = yaml.dump(
+            {"jobs": self.workflow_jobs}, default_flow_style=False, sort_keys=False
+        )
+
+        return self.workflow_yaml, self.workflow_params
+
+    def run_workflow(self, name_suffix=""):
+        self.workflow = self.client.workflows.run_async(
+            self.workflow_yaml,
+            parameters=self.workflow_params,
+            assets=self.workflow_assets,
+        )
+
+        ret = {
+            "id": self.workflow.id,
+            "name": self.simulation_name,
+            "totalEnergyAbsorption": 100.0,
+        }
+        for info in self.part_infos:
+            if hasattr(info.part, "filename"):
+                element_name = f"{info.part.name}{name_suffix}"
+                ret[f"stl_{element_name}"] = str(info.part.filename)
+        self.results.append(ret)
+        self._save_results()
+
+    @staticmethod
+    def _dump_xml(et: ElementTree.ElementTree, **kwargs) -> str:
+        with BytesIO() as b:
+            et.write(b, **kwargs)
+            return b.getvalue().decode()
+
+    @staticmethod
+    def _write_ply(
+        df: pd.DataFrame, columns: list[tuple[str, DTypeLike]], zf: ZipFile, name: str
+    ):
+        """
+        Write one PLY file per timestep.
+        df must have a 'time' level in its index and columns: x, y, z, + whatever
+        is listed in `columns`.
+        """
+        cols = [("x", np.float32), ("y", np.float32), ("z", np.float32)] + columns
+
+        for i, (_, group) in enumerate(df.groupby("time")):
+            data_out = np.empty((len(group),), dtype=cols)
+            for col, _ in cols:
+                if col in group:
+                    data_out[col] = group[col].values
+            elem_out = PlyElement.describe(data_out, "vertex")
+
+            filename = f"{name}/ply/part.{i:04d}.ply"
+            with zf.open(filename, "w") as f:
+                PlyData([elem_out]).write(f)
+
+    @staticmethod
+    def _fix_viscoelastic_xml(
+        tree: ElementTree.ElementTree,
+        viscoelastic_modes: list[dict],
+    ) -> ElementTree.ElementTree:
+        root = tree.getroot()
+        if root is not None:
+            for vs_elem in root.iter("viscoelastic_series"):
+                if vs_elem.text and vs_elem.text.strip().startswith("["):
+                    vs_elem.text = None
+                    for mode in viscoelastic_modes:
+                        mode_elem = ElementTree.SubElement(vs_elem, "mode")
+                        mode_elem.set("name", mode["mode"])
+                        rt = ElementTree.SubElement(mode_elem, "relaxation_time")
+                        rt.text = str(mode["relaxation_time"])
+                        psm = ElementTree.SubElement(mode_elem, "partial_shear_modulus")
+                        psm.text = str(mode["partial_shear_modulus"])
+        return tree
+
+    def _fix_contact_xml(
+        self, tree: ElementTree.ElementTree
+    ) -> ElementTree.ElementTree:
+        """Patch each rigid contact element with the correct Uintah type,
+        velocity filename, and mu based on the master_material's part info."""
+        # Build lookup: material_index → part_info (only rigid parts have these)
+        parts_by_mat_idx = {p.material_index: p for p in self.part_infos}
+
+        root = tree.getroot()
+        if root is not None:
+            for contact_elem in root.iter("contact"):
+                type_elem = contact_elem.find("type")
+                if type_elem is None or type_elem.text != "rigid":
+                    continue
+
+                master_elem = contact_elem.find("master_material")
+                if master_elem is None or master_elem.text is None:
+                    continue
+                master_idx = int(master_elem.text.strip())
+
+                part_info = parts_by_mat_idx.get(master_idx)
+                if part_info is None or not hasattr(part_info.part, "contact_type"):
+                    # No matching rigid part — leave the contact alone
+                    continue
+
+                part = part_info.part
+                contact_type = part.contact_type
+                mu = "0.0"
+                if hasattr(part, "mu"):
+                    mu = str(part.mu)
+                filename = f"velocity_{part_info.part_unique_name}.txt"
+
+                # Patch <type>
+                type_elem.text = contact_type
+                type_index = list(contact_elem).index(type_elem)
+
+                # Insert <filename> right after <type>
+                fn_elem = ElementTree.Element("filename")
+                fn_elem.text = filename
+                contact_elem.insert(type_index + 1, fn_elem)
+
+                # Insert <mu> before <direction>
+                direction_elem = contact_elem.find("direction")
+                if direction_elem is not None:
+                    dir_index = list(contact_elem).index(direction_elem)
+                    mu_elem = ElementTree.Element("mu")
+                    mu_elem.text = mu
+                    contact_elem.insert(dir_index, mu_elem)
+        return tree
+
+    @staticmethod
+    def write_histogram_csv(df, f, **kwargs):
+        df = df.droplevel(1)
+        df = df[["bin_left", "frequency"]]
+        df.rename(columns={"bin_left": "bin_edges", "frequency": "count"}, inplace=True)
+        codes, _ = df.index.factorize()
+        df.index = pd.Index(codes, name="timestep")
+        df.to_csv(f, **kwargs)
+
+    def make_manifest(self):
+        manifest_config = [
+            {"key": "name", "heading": "Name", "filtering": True},
+            {"key": "volume", "heading": "Volume (mm³)", "filtering": False},
+            {
+                "key": "loadingEnergy",
+                "heading": "Loading Energy (J)",
+                "filtering": False,
+            },
+            {
+                "key": "unloadingEnergy",
+                "heading": "Unloading Energy (J)",
+                "filtering": False,
+            },
+            {
+                "key": "energyAbsorbed",
+                "heading": "Absorbed Energy (J)",
+                "filtering": False,
+            },
+        ]
+        self.manifest = {
+            "resultsListConfig": manifest_config,
+            "cardsConfig": {},
+            "simulationPreviewConfig": {
+                "variables": [
+                    {"key": "vonMisesStress", "displayName": "von Mises Stress"},
+                    {"key": "effectiveStrain", "displayName": "Effective Strain"},
+                    {"key": "displacement", "displayName": "Displacement"},
+                    {"key": "material", "displayName": "Material"},
+                ],
+                "dataSource": "ply",
+                "materialsConfig": {
+                    str(i): {
+                        "displayName": part_info.part_unique_name,
+                        **(
+                            {"useSolidColor": True}
+                            if isinstance(part_info.part, ExperimentPistonBase)
+                            else {}
+                        ),
+                    }
+                    for i, part_info in enumerate(self.part_infos)
+                },
+            },
+        }
+        if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+            self.manifest["cardsConfig"]["A"] = [
+                {
+                    "id": "forceDisplacement",
+                    "title": "Force-Displacement",
+                    "component": "MultiExperimentLineChart",
+                    "props": {
+                        "xColumn": "displacement",
+                        "yColumn": "force",
+                        "yMin": 0.0,
+                        "xAxisLabel": "Displacement (mm)",
+                        "yAxisLabel": "Force (N)",
+                        "dataSource": "forceDisplacement",
+                        "referenceCurve": {
+                            "resultId": "1",
+                            "dataSource": "referenceCurve",
+                            "xColumn": "displacement",
+                            "yColumn": "force",
+                        },
+                        "tooltips": [
+                            {
+                                "dataColumn": "energy_absorbed_cumulative",
+                                "title": "Energy Absorbed (J)",
+                            },
+                        ],
+                    },
+                },
+            ]
+        self.manifest["cardsConfig"]["B"] = [
+            {
+                "id": "LoadCumulativeEnergy",
+                "title": "Load-Cumulative Energy",
+                "component": "MultiExperimentLineChart",
+                "props": {
+                    "xColumn": "force",
+                    "yColumn": "energy_absorbed_cumulative",
+                    "yMin": 0.0,
+                    "xAxisLabel": "Load (N)",
+                    "yAxisLabel": "Cumulative Energy (J)",
+                    # forceDisplacement CSV contains both force and
+                    # energy_absorbed_cumulative so it feeds both card A and B.
+                    "dataSource": "loadingForceDisplacement",
+                    "referenceCurve": {
+                        "resultId": "1",
+                        "dataSource": "referenceCurve",
+                        "xColumn": "load",
+                        "yColumn": "energy_absorbed_cumulative",
+                    },
+                    "tooltips": [
+                        {
+                            "dataColumn": "energy_absorbed_cumulative",
+                            "title": "Energy Absorbed (J)",
+                        },
+                    ],
+                },
+            },
+        ]
+        self.manifest["cardsConfig"]["C"] = [
+            {
+                "id": "energyVolume",
+                "title": "Energy Absorbed-Interior Volume",
+                "component": "MultiExperimentScatterPlot",
+                "props": {
+                    "xDataKey": "volume",
+                    "yDataKey": "energyAbsorbed",
+                    "xAxisLabel": "Interior Volume (mm³)",
+                    "yAxisLabel": "Energy Absorbed (J)",
+                    "colorScaleMeasurement": "energyAbsorbed",
+                },
+            },
+        ]
+
+    def _contains_step(self, step_type: WorkflowStepType):
+        return any(step.type == step_type for step in self.workflow_steps)
+
+    def _get_step(self, step_type: WorkflowStepType, part_name=None):
+        for step in self.workflow_steps:
+            if step.type == step_type:
+                if part_name is None or (
+                    part_name in step.part_names or not step.part_names
+                ):
+                    return step
+        return None
+
+    @staticmethod
+    def _apply_force_displacement_correction(
+        df: pd.DataFrame, shift_mm: float
+    ) -> pd.DataFrame:
+        """Remove the 'toe' region from the start (displacement < shift_mm) and
+        re-zero both displacement and force so the curve starts at (0, 0).
+        Also appends a final (0, 0) row to close the loop."""
+        if shift_mm <= 0 or df.empty:
+            return df
+
+        df = df.copy()
+        df["displacement"] = df["displacement"] - shift_mm
+        df = df[df["displacement"] >= 0].copy()
+        if df.empty:
+            return df
+
+        df["displacement"] = df["displacement"] - df["displacement"].iloc[0]
+        if "force" in df.columns:
+            df["force"] = df["force"] - df["force"].iloc[0]
+        df.reset_index(drop=True, inplace=True)
+        df.loc[0, "displacement"] = 0.0
+        if "force" in df.columns:
+            df.loc[0, "force"] = 0.0
+            zero_row = pd.DataFrame([{col: 0.0 for col in df.columns}])
+            df = pd.concat([df, zero_row], ignore_index=True)
+        return df
+
+    def write_results(self):
+        if not self.results:
+            print(
+                f"No persisted results for '{self.simulation_name}' — nothing to download."
+            )
+            return
+        zip_filename = self.out_dir / "out.zip"
+        with ZipFile(zip_filename, "w") as zf:
+            self._write_results_to_zip(zf)
+            self._write_manifest_to_zip(zf, self.results)
+
+    @staticmethod
+    def _is_analysis_target(p: ExperimentPart):
+        if isinstance(p, ExperimentPistonBase) or isinstance(p, ExperimentSupportBase):
+            return False
+        return True
+
+    def _write_results_to_zip(self, zf: ZipFile):
+        """Poll each workflow in self.results, download assets, and write
+        per-sim files into the given zip. Mutates each entry of self.results
+        in place, adding 'data', 'volume', 'energyAbsorbed', etc."""
+        for result in self.results:
+            w = self.client.workflows.get(result["id"])
+            while w.state not in ["success", "failure", "canceled"]:
+                sleep(1)
+                # refresh the workflow
+                w = self.client.workflows.get(w.id)
+
+            if w.state == "success":
+                name = self.simulation_name
+                data: dict[str, Any] = {}
+
+                # Mesh previews — copy the original input file directly into
+                # the zip. No mesh-from-volume job; the input mesh is the mesh
+                stl_assets = []
+                for part_info in self.part_infos:
+                    if not self._is_analysis_target(part_info.part):
+                        continue
+                    if part_info.file_path is None:
+                        continue
+                    mat_idx = part_info.material_index
+                    src_path = part_info.file_path
+                    zip_path = (
+                        f"{name}/mesh_{part_info.part_unique_name}"
+                        f"{src_path.suffix.lower()}"
+                    )
+                    with open(src_path, "rb") as src, zf.open(zip_path, "w") as dst:
+                        copyfileobj(src, dst)
+                    stl_assets.append({"bodyId": mat_idx, "fileName": zip_path})
+
+                data["stl"] = stl_assets
+
+                with TemporaryDirectory() as tempdir:
+                    hdf_filename = Path(tempdir) / "out.h5"
+
+                    # ----------------------------------------------------------
+                    # Build a per-material dataframe then concat into one big df.
+                    #
+                    # For each material we collect:
+                    #   - x, y, z          (from compress.output)
+                    #   - vonMisesStress   (from von-mises-stress.output)
+                    #   - effectiveStrain  (from effective-strain.output)
+                    #   - displacement     (from particle-displacement.output)
+                    #   - material         (integer label so the viewer can colour by part)
+                    #
+                    # All four per-material dataframes are concat'd vertically before
+                    # write_ply is called, so every particle from every material ends
+                    # up in every PLY frame.
+                    # ----------------------------------------------------------
+
+                    # Download all three postprocess HDF files once each
+                    vm_hdf = None
+                    if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+                        vm_asset = w.get_asset("von-mises-stress.output")
+                        if vm_asset is not None:
+                            vm_hdf = Path(tempdir) / "von_mises.h5"
+                            self.client.assets.download_file(vm_asset.id, vm_hdf)
+
+                    es_hdf = None
+                    if self._contains_step(WorkflowStepType.EFFECTIVE_STRAIN):
+                        es_asset = w.get_asset("effective-strain.output")
+                        if es_asset is not None:
+                            es_hdf = Path(tempdir) / "eff_strain.h5"
+                            self.client.assets.download_file(es_asset.id, es_hdf)
+
+                    pd_hdf = None
+                    if self._contains_step(WorkflowStepType.PARTICLE_DISPLACEMENT):
+                        pd_asset = w.get_asset("particle-displacement.output")
+                        if pd_asset is not None:
+                            pd_hdf = Path(tempdir) / "part_disp.h5"
+                            self.client.assets.download_file(pd_asset.id, pd_hdf)
+
+                    uo_hdf = None
+                    if self._contains_step(WorkflowStepType.COMPRESS):
+                        uo_asset = w.get_asset("compress.output")
+                        if uo_asset is not None:
+                            uo_hdf = Path(tempdir) / "compress.h5"
+                            self.client.assets.download_file(uo_asset.id, uo_hdf)
+
+                    material_dfs = []  # one entry per material, concat'd at the end
+
+                    def to_indexed(df):
+                        """Normalise to (time, id) MultiIndex regardless of whether the
+                        HDF stored them as columns or already as the index."""
+                        return df.reset_index().set_index(["time", "id"])
+
+                    for part_info in self.part_infos:
+                        mat_idx = part_info.material_index
+                        mat_key = f"material{mat_idx}"
+
+                        # --- positions (m → mm) ---
+                        pos = None
+                        if (
+                            self._contains_step(WorkflowStepType.COMPRESS)
+                            and uo_hdf is not None
+                        ):
+                            try:
+                                with pd.HDFStore(uo_hdf) as store:
+                                    key = f"/{mat_key}/position"
+                                    if key in store:
+                                        pos = store[key]
+                                if pos is not None:
+                                    pos = (
+                                        to_indexed(pos)[["x", "y", "z"]] * 1e3
+                                    )  # m → mm
+                            except Exception as e:
+                                pass
+
+                        # --- von Mises stress ---
+                        vm = None
+                        if (
+                            self._contains_step(WorkflowStepType.VON_MISES_STRESS)
+                            and vm_hdf is not None
+                        ):
+                            try:
+                                with pd.HDFStore(vm_hdf) as store:
+                                    key = f"/{mat_key}/von_mises_stress"
+                                    if key in store:
+                                        vm = store[key]
+                                if vm is not None:
+                                    vm = to_indexed(vm)[["v"]].rename(
+                                        columns={"v": "vonMisesStress"}
+                                    )
+                            except Exception as e:
+                                pass
+
+                        # --- effective strain ---
+                        es = None
+                        if (
+                            self._contains_step(WorkflowStepType.EFFECTIVE_STRAIN)
+                            and es_hdf is not None
+                        ):
+                            try:
+                                with pd.HDFStore(es_hdf) as store:
+                                    key = f"/{mat_key}/effective_strain"
+                                    if key in store:
+                                        es = store[key]
+                                if es is not None:
+                                    es = to_indexed(es)[["v"]].rename(
+                                        columns={"v": "effectiveStrain"}
+                                    )
+                            except Exception as e:
+                                pass
+
+                        # --- displacement magnitude ---
+                        disp = None
+                        if (
+                            self._contains_step(WorkflowStepType.PARTICLE_DISPLACEMENT)
+                            and pd_hdf is not None
+                        ):
+                            try:
+                                with pd.HDFStore(pd_hdf) as store:
+                                    key = f"/{mat_key}/particle_displacement"
+                                    if key in store:
+                                        disp = store[key]
+                                if disp is not None:
+                                    disp = to_indexed(disp)[["norm"]].rename(
+                                        columns={"norm": "displacement"}
+                                    )
+                            except Exception as e:
+                                pass
+
+                        # Join all variables for this material on (time, id)
+                        mat_df = None
+                        if pos is not None:
+                            mat_df = pos
+                        if vm is not None:
+                            if mat_df is not None:
+                                mat_df = mat_df.join(vm)
+                            else:
+                                mat_df = vm
+                        if es is not None:
+                            if mat_df is not None:
+                                mat_df = mat_df.join(es)
+                            else:
+                                mat_df = es
+                        if disp is not None:
+                            if mat_df is not None:
+                                mat_df = mat_df.join(disp)
+                            else:
+                                mat_df = disp
+                        if mat_df is not None:
+                            mat_df["material"] = (
+                                mat_idx  # integer label (0=piston … 3=outsole)
+                            )
+                            material_dfs.append(mat_df)
+
+                    # Combine all materials into one big dataframe
+                    if material_dfs:
+                        ply_data = pd.concat(material_dfs)
+                        ply_data = (
+                            ply_data.reset_index()
+                        )  # bring time back as a plain column for groupby
+
+                    # ----------------------------------------------------------
+                    # Save per-material CSVs for the dashboard (still material 1
+                    # only for stress/strain histograms, as the dashboard expects)
+                    # ----------------------------------------------------------
+                    # TODO! Maybe we can support multiple material histograms now?  THis is hard
+                    # coded to just material 1
+                    if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+                        assert vm_hdf is not None
+                        with pd.HDFStore(vm_hdf) as store:
+                            filename = f"{name}/vonMisesStress.csv"
+                            if "/material1/von_mises_stress" in store:
+                                with zf.open(filename, "w") as f:
+                                    store["/material1/von_mises_stress"].to_csv(
+                                        f, index=False
+                                    )
+                                data["vonMisesStress"] = filename
+
+                            filename = f"{name}/vonMisesStressHistogram.csv"
+                            if "/material1/von_mises_stress_histogram" in store:
+                                with zf.open(filename, "w") as f:
+                                    self.write_histogram_csv(
+                                        store["/material1/von_mises_stress_histogram"],
+                                        f,
+                                    )
+                                data["vonMisesStressHistogram"] = filename
+
+                    if self._contains_step(WorkflowStepType.EFFECTIVE_STRAIN):
+                        assert es_hdf is not None
+                        with pd.HDFStore(es_hdf) as store:
+                            filename = f"{name}/effectiveStrain.csv"
+                            if "/material1/effective_strain" in store:
+                                with zf.open(filename, "w") as f:
+                                    store["/material1/effective_strain"].to_csv(
+                                        f, index=False
+                                    )
+                                data["effectiveStrain"] = filename
+
+                            filename = f"{name}/effectiveStrainHistogram.csv"
+                            if "/material1/effective_strain_histogram" in store:
+                                with zf.open(filename, "w") as f:
+                                    self.write_histogram_csv(
+                                        store["/material1/effective_strain_histogram"],
+                                        f,
+                                    )
+                                data["effectiveStrainHistogram"] = filename
+
+                    # Force-displacement (feeds card A and card B)
+                    energy_absorbed_cumulative = None
+                    loading_energy = None
+                    unloading_energy = None
+                    if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+                        fd_asset = w.get_asset("force-displacement.output")
+                        assert fd_asset
+                        self.client.assets.download_file(fd_asset.id, hdf_filename)
+                        with pd.HDFStore(hdf_filename) as store:
+                            df = store["/force_displacement"].reset_index()
+                            df = self._apply_force_displacement_correction(
+                                df,
+                                self.simulation_parameters.force_displacement_shift_mm,
+                            )
+
+                            filename = f"{name}/forceDisplacement.csv"
+                            with zf.open(filename, "w") as f:
+                                df.to_csv(f)
+                                energy_absorbed_cumulative = (
+                                    df["energy_absorbed_cumulative"].iloc[-1]
+                                    if len(df)
+                                    else 0.0
+                                )
+                            data["forceDisplacement"] = filename
+
+                            # Split at max compression (turning point in displacement)
+                            # rather than max_time/2 so loading/unloading stay correct
+                            # even when cycle timing changes.
+                            disp0 = df["displacement"].iloc[0]
+                            split_idx = (df["displacement"] - disp0).abs().idxmax()
+                            split_time = df.loc[split_idx, "time"]
+                            loading = df[df["time"] <= split_time]
+                            unloading = df[df["time"] > split_time]
+
+                            loading_energy = (
+                                loading["energy_absorbed_cumulative"].iloc[-1]
+                                if len(loading)
+                                else 0.0
+                            )
+                            final_energy = (
+                                df["energy_absorbed_cumulative"].iloc[-1]
+                                if len(df)
+                                else 0.0
+                            )
+                            unloading_energy = max(0.0, loading_energy - final_energy)
+
+                            filename = f"{name}/loadingForceDisplacement.csv"
+                            if self.reference_data.csv_path.is_file():
+                                if (
+                                    str(self.reference_data.curve_zip_path)
+                                    not in zf.namelist()
+                                ):
+                                    with zf.open(
+                                        str(self.reference_data.curve_zip_path), "w"
+                                    ) as f:
+                                        with open(
+                                            self.reference_data.csv_path, "rb"
+                                        ) as ref:
+                                            f.write(ref.read())
+                            else:
+                                print(
+                                    "WARNING: reference.csv not found — overlay will not appear."
+                                )
+
+                            with zf.open(filename, "w") as f:
+                                loading.to_csv(f)
+                            data["loadingForceDisplacement"] = filename
+
+                    # Stress-strain
+                    if self._contains_step(WorkflowStepType.STRESS_STRAIN):
+                        ss_asset = w.get_asset("stress-strain.output")
+                        assert ss_asset
+                        self.client.assets.download_file(ss_asset.id, hdf_filename)
+                        with pd.HDFStore(hdf_filename) as store:
+                            filename = f"{name}/stressStrain.csv"
+                            with zf.open(filename, "w") as f:
+                                store["/stress_strain"].to_csv(f)
+                            data["stressStrain"] = filename
+
+                    # ----------------------------------------------------------
+                    # Write PLY files from the combined all-material dataframe.
+                    # Every frame contains particles from all four materials with
+                    # vonMisesStress, effectiveStrain, displacement, and a material
+                    # label so the viewer can colour by part.
+                    # ----------------------------------------------------------
+                    ply_columns: list[tuple[str, DTypeLike]] = []
+                    if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+                        ply_columns.append(("vonMisesStress", np.float32))
+                    if self._contains_step(WorkflowStepType.EFFECTIVE_STRAIN):
+                        ply_columns.append(("effectiveStrain", np.float32))
+                    if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+                        ply_columns.append(("displacement", np.float32))
+                    ply_columns.append(("material", np.int32))
+                    self._write_ply(
+                        ply_data,
+                        ply_columns,
+                        zf,
+                        name,
+                    )
+                    data["ply"] = f"{name}/ply/part.####.ply"
+
+                    # Sum interior volumes from all parts
+                    total_volume = 0.0
+                    for part_info in self.part_infos:
+                        if self._is_analysis_target(part_info.part):
+                            metrics_job = part_info.jobs.get("metrics", "")
+                            if metrics_job:
+                                raw = w.get_parameter(f"{metrics_job}.interior_volume")
+                                if raw is not None:
+                                    total_volume += float(raw)
+
+                    result.update(
+                        {
+                            "data": data,
+                            "volume": total_volume,
+                        }
+                    )
+                    if energy_absorbed_cumulative is not None:
+                        result["energyAbsorbed"] = energy_absorbed_cumulative
+                    if loading_energy is not None:
+                        result["loadingEnergy"] = round(loading_energy, 4)
+                    if unloading_energy is not None:
+                        result["unloadingEnergy"] = round(unloading_energy, 4)
+
+    def _write_manifest_to_zip(self, zf: ZipFile, all_results: list):
+        reference_result = {
+            "id": "1",
+            "name": "Reference (experimental)",
+            "isExperimental": True,
+            "project": "stride",
+            "material": "Reference",
+            "volume": self.reference_data.volume,
+            "originalVolume": 0,
+            "density": 0,
+            "energyAbsorbed": self.reference_data.energy_absorbed,
+            "loadingEnergy": self.reference_data.loading_energy,
+            "unloadingEnergy": self.reference_data.unloading_energy,
+            "data": {"referenceCurve": str(self.reference_data.curve_zip_path)},
+        }
+
+        self.make_manifest()
+        m = copy.deepcopy(self.manifest)
+        m["results"] = [reference_result] + all_results
+
+        with zf.open("manifest.json", "w") as f:
+            f.write(json.dumps(m, indent=2).encode())

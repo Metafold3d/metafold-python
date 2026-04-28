@@ -18,7 +18,7 @@ dependencies = [
 readme = "README.md"
 license = {file = "LICENSE"}
 description = "Metafold SDK for Python"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["metafold", "api", "sdk", "implicit geometry"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -26,11 +26,21 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.optional-dependencies]
+simulation = [
+    "dotenv>=0.9.9",
+    "metafold-graph>=0.4.0",
+    "pandas>=2.3.3",
+    "plyfile>=1.1.3",
+    "pyyaml>=6.0.3",
+    "simulation-configurator==0.1.0",
+    "tables>=3.11.1",
 ]
 
 [project.urls]
@@ -48,10 +58,38 @@ dev = [
     "sphinx~=7.2",
     "sphinx-rtd-theme~=2.0",
     "types-requests>=2.32.4.20260107",
+    "types-PyYAML>=6.0.12",
+    "pandas-stubs>=2.0.0",
 ]
 
 [tool.setuptools]
-packages = ["metafold"]
+packages = ["metafold", "metafold.simulation"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+
+[tool.uv.sources]
+metafold-graph = { index = "metafold-graph-idx" }
+simulation-configurator = { index = "sim-config-idx" }
+
+[[tool.mypy.overrides]]
+module = [
+    "simulation_configurator.*",
+    "plyfile",
+    "metafold_graph.*",
+]
+ignore_missing_imports = true
+
+[[tool.uv.index]]
+name = "sim-config-idx"
+url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/simple"
+explicit = true
+authenticate = "always"
+
+[[tool.uv.index]]
+name = "metafold-graph-idx"
+url = "https://gitlab.com/api/v4/projects/40550184/packages/pypi/simple"
+explicit = true
 
 [tool.ruff.lint]
 select = ["NPY201"]

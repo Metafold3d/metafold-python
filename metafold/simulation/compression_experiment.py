@@ -3,7 +3,10 @@ import json
 from typing import Any, List, Union, cast
 import glob
 from pathlib import Path
-from metafold.simulation.compression_simulation import CompressionSimulation, ExperimentMesh
+from metafold.simulation.compression_simulation import (
+    CompressionSimulation,
+    ExperimentMesh,
+)
 from metafold.materials import Material
 from metafold.utils import natural_sort
 from zipfile import ZipFile
@@ -115,7 +118,10 @@ class CompressionExperiment:
         force_rerun: bool = False,
         auto_run: bool = True,
         auto_download_results: bool = True,
+        use_legacy_results_format: bool = False,
     ):
+        simulation.use_legacy_results_format = use_legacy_results_format
+        self.use_legacy_results_format = use_legacy_results_format
         self.base_simulation = simulation
         self.varying = varying
         self.verbose = verbose
@@ -292,8 +298,6 @@ class CompressionExperiment:
     def download_results(self):
         self._log("=== DOWNLOAD RESULTS ===")
 
-        # If sims haven't been built in this process (e.g. re-running the
-        # script just to download), rebuild them from persisted state.
         if not self.sims:
             self._log("No sims in memory — loading persisted experiment state...")
             self._rebuild_sims_from_state()
@@ -308,10 +312,16 @@ class CompressionExperiment:
                 self._log(
                     f"  [{sim_index + 1}/{len(self.sims)}] Collecting results for {local_sim.simulation_name}"
                 )
-                local_sim._write_results_to_zip(zf)
+                if not self.use_legacy_results_format:
+                    local_sim._write_results_to_zip_v2(zf)
+                else:
+                    local_sim._write_results_to_zip(zf)
                 all_results.extend(local_sim.results)
 
             self._log(f"Writing combined manifest with {len(all_results)} result(s)...")
-            self.base_simulation._write_manifest_to_zip(zf, all_results)
+            if not self.use_legacy_results_format:
+                self.base_simulation._write_manifest_to_zip_v2(zf, all_results)
+            else:
+                self.base_simulation._write_manifest_to_zip(zf, all_results)
 
         print(f"Experiment complete. Results written to: {zip_filename}")

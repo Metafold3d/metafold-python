@@ -1,7 +1,11 @@
+from io import BytesIO
+from zipfile import ZipFile
+
 import pytest
 from unittest.mock import MagicMock
 import json
 import yaml
+from pathlib import Path
 
 from metafold.simulation.compression_simulation import (
     DEFAULT_PISTON_VELOCITY,
@@ -428,3 +432,262 @@ jobs:
             assert key in workflow_params, f"missing key: {key}"
             assert workflow_params[key] == value, f"mismatch for {key}: {workflow_params[key]!r} != {value!r}"
 
+
+
+class TestMeshDataKey:
+    def test_simple_name(self):
+        assert CompressionSimulation._mesh_data_key("midsole") == "midsole_mesh"
+
+    def test_underscored_name(self):
+        assert CompressionSimulation._mesh_data_key("upper_foam") == "upper_foam_mesh"
+
+    def test_numeric_suffix(self):
+        assert CompressionSimulation._mesh_data_key("support_1") == "support_1_mesh"
+
+
+class TestMakeManifestV2:
+    """Tests for make_manifest_v2 — manifest structure only, no I/O."""
+
+    @pytest.fixture
+    def sim_with_full_steps(self, ply_folder, basic_parts, tmp_path):
+        return CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+
+    def test_results_list_config_has_expected_columns(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        keys = [c["key"] for c in sim_with_full_steps.manifest["resultsListConfig"]]
+        assert keys == ["name", "volume", "loadingEnergy", "unloadingEnergy", "energyAbsorbed"]
+
+    def test_simulation_preview_data_source(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        assert sim_with_full_steps.manifest["simulationPreviewConfig"]["dataSource"] == "position"
+
+    def test_simulation_preview_variables_full(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        variables = sim_with_full_steps.manifest["simulationPreviewConfig"]["variables"]
+        names = [v["dataSource"] for v in variables]
+        assert "vonMisesStress" in names
+        assert "effectiveStrain" in names
+        assert "particleDisplacement" in names
+
+    def test_simulation_preview_variables_skipped_when_step_missing(
+        self, ply_folder, basic_parts, tmp_path
+    ):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2()
+        assert sim.manifest["simulationPreviewConfig"]["variables"] == []
+
+    def test_materials_config_uses_part_names(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        materials = sim_with_full_steps.manifest["simulationPreviewConfig"]["materialsConfig"]
+        assert set(materials.keys()) == {"0", "1", "2", "3"}
+        assert materials["0"]["displayName"] == "piston"
+        assert materials["0"].get("useSolidColor") is True
+
+    def test_materials_config_non_piston_no_solid_color(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        materials = sim_with_full_steps.manifest["simulationPreviewConfig"]["materialsConfig"]
+        for idx, info in enumerate(sim_with_full_steps.part_infos):
+            if not isinstance(info.part, ExperimentPistonBase):
+                assert "useSolidColor" not in materials[str(idx)]
+
+    def test_part_preview_config_excludes_piston(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        previews = sim_with_full_steps.manifest["partPreviewConfig"]
+        names = [p["displayName"] for p in previews]
+        assert "piston" not in names
+        assert "upper_foam" in names
+        assert "midsole" in names
+        assert "outsole" in names
+
+    def test_part_preview_config_uses_mesh_data_key(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        previews = sim_with_full_steps.manifest["partPreviewConfig"]
+        for p in previews:
+            assert p["dataSource"] == f"{p['displayName']}_mesh"
+
+    def test_part_preview_config_file_format(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        previews = sim_with_full_steps.manifest["partPreviewConfig"]
+        for p in previews:
+            assert p["fileFormat"] == "ply"
+
+    def test_card_a_present_when_force_displacement_step_present(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        assert "A" in sim_with_full_steps.manifest["cardsConfig"]
+        assert sim_with_full_steps.manifest["cardsConfig"]["A"][0]["id"] == "forceDisplacement"
+
+    def test_card_a_absent_when_no_force_displacement(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2()
+        assert "A" not in sim.manifest["cardsConfig"]
+
+class TestWriteResultsToZipV2:
+    """Tests for _write_results_to_zip_v2 using a mocked workflow.
+
+    Tests use a workflow_steps list that excludes COMPRESS and
+    FORCE_DISPLACEMENT because those branches read the downloaded HDF
+    files (for position extraction and energy calculation respectively),
+    which would require valid HDF content from our mock client. The
+    other postprocess HDFs ship whole and only need an empty file on
+    disk, which the mock provides.
+    """
+
+    @pytest.fixture
+    def prepared_sim(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="ts",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            use_legacy_results_format=False,
+            workflow_steps=[
+                WorkflowStep(WorkflowStepType.METRICS),
+                WorkflowStep(WorkflowStepType.VON_MISES_STRESS),
+                WorkflowStep(WorkflowStepType.EFFECTIVE_STRAIN),
+                WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
+                WorkflowStep(WorkflowStepType.STRESS_STRAIN),
+            ],
+        )
+        # Mocked download_file needs to actually create the file so
+        # zf.write can read it back.
+        def fake_download(asset_id, path):
+            Path(path).touch()
+        sim.client.assets.download_file.side_effect = fake_download
+
+        for i, info in enumerate(sim.part_infos):
+            info.material_index = i
+            info.jobs["metrics"] = f"metrics-{info.part_unique_name}"
+        sim.results = [{"id": "wf-1", "name": "ts"}]
+        return sim
+
+    def _mock_success_workflow(self):
+        wf = MagicMock()
+        wf.state = "success"
+        asset = MagicMock()
+        asset.id = "asset-x"
+        wf.get_asset.return_value = asset
+        wf.get_parameter.return_value = "1000"
+        return wf
+
+    def test_skips_failed_workflow(self, prepared_sim):
+        failed = MagicMock()
+        failed.state = "failure"
+        prepared_sim.client.workflows.get.return_value = failed
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+            buf.seek(0)
+            with ZipFile(buf) as zf:
+                assert zf.namelist() == []
+
+    def test_mesh_previews_named_with_original_prefix(self, prepared_sim):
+        prepared_sim.client.workflows.get.return_value = self._mock_success_workflow()
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+            buf.seek(0)
+            with ZipFile(buf) as zf:
+                names = zf.namelist()
+                assert "ts/original_upper_foam.ply" in names
+                assert "ts/original_midsole.ply" in names
+                assert "ts/original_outsole.ply" in names
+                assert not any("piston" in n for n in names)
+
+    def test_mesh_data_keys_use_underscore_format(self, prepared_sim):
+        prepared_sim.client.workflows.get.return_value = self._mock_success_workflow()
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+
+        result = prepared_sim.results[0]
+        assert "upper_foam_mesh" in result["data"]
+        assert "midsole_mesh" in result["data"]
+        assert "outsole_mesh" in result["data"]
+        assert result["data"]["midsole_mesh"]["name"] == "ts/original_midsole.ply"
+
+    def test_per_material_hdf_data_keys(self, prepared_sim):
+        prepared_sim.client.workflows.get.return_value = self._mock_success_workflow()
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+
+        result = prepared_sim.results[0]
+        for i in range(4):
+            assert f"vonMisesStress{i}" in result["data"]
+            assert result["data"][f"vonMisesStress{i}"]["path"] == f"/material{i}/von_mises_stress"
+            assert result["data"][f"vonMisesStress{i}"]["name"] == "ts/von_mises.h5"
+
+    def test_per_material_histogram_keys(self, prepared_sim):
+        prepared_sim.client.workflows.get.return_value = self._mock_success_workflow()
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+
+        result = prepared_sim.results[0]
+        for i in range(4):
+            assert f"vonMisesStressHistogram{i}" in result["data"]
+            assert (
+                result["data"][f"vonMisesStressHistogram{i}"]["path"]
+                == f"/material{i}/von_mises_stress_histogram"
+            )
+
+    def test_total_volume_sums_analysis_targets(self, prepared_sim):
+        wf = self._mock_success_workflow()
+        wf.get_parameter.return_value = "1000"
+        prepared_sim.client.workflows.get.return_value = wf
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                prepared_sim._write_results_to_zip_v2(zf)
+
+        # 3 analysis-target parts × 1000 = 3000
+        assert prepared_sim.results[0]["volume"] == 3000.0
+
+    def test_no_step_means_no_hdf_download(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="ts",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            use_legacy_results_format=False,
+            workflow_steps=[],
+        )
+        for i, info in enumerate(sim.part_infos):
+            info.material_index = i
+        sim.results = [{"id": "wf-1", "name": "ts"}]
+        sim.client.workflows.get.return_value = self._mock_success_workflow()
+
+        with BytesIO() as buf:
+            with ZipFile(buf, "w") as zf:
+                sim._write_results_to_zip_v2(zf)
+            buf.seek(0)
+            with ZipFile(buf) as zf:
+                names = zf.namelist()
+                assert not any(n.endswith(".h5") for n in names)

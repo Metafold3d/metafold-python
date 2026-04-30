@@ -3,9 +3,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from shutil import copyfileobj
 from typing import Any, Optional, Union
-from dotenv import load_dotenv
 from io import BytesIO
 
+from dotenv import load_dotenv
 import yaml
 from metafold import MetafoldClient
 from metafold_graph.func import *
@@ -803,12 +803,15 @@ class CompressionSimulation:
                 materials = [info.material_index] + deformable_indices
                 rigid_contacts.append(
                     Contact(
-                        type="rigid",
-                        materials=materials,
+                        type=info.part.contact_type,
+                        filename=f"velocity_{info.part_unique_name}.txt",
+                        mu=info.part.mu,
                         master_material=info.material_index,
                         direction=[1, 1, 1],
+                        materials=materials,
                     )
                 )
+
 
         single_velocity_contact = Contact(
             type="single_velocity",
@@ -829,15 +832,7 @@ class CompressionSimulation:
         sim.add([mpm, archive, store, grid])
 
         # this stuff should be fixed laster, this is just a workaround
-        representative_material = self.get_part_info(
-            self.representative_part
-        ).part.material.to_dict()
-        viscoelastic_modes = representative_material["constitutive_model"]["params"][
-            "viscoelastic_series"
-        ]
         self.ups = sim.to_xml()
-        self.ups = self._fix_viscoelastic_xml(self.ups, viscoelastic_modes)
-        self.ups = self._fix_contact_xml(self.ups)
         ElementTree.indent(self.ups)
 
     def _add_to_workflow_metrics(self, part_infos: list[PartInfo]):
@@ -1095,75 +1090,6 @@ class CompressionSimulation:
             filename = f"{name}/ply/part.{i:04d}.ply"
             with zf.open(filename, "w") as f:
                 PlyData([elem_out]).write(f)
-
-    @staticmethod
-    def _fix_viscoelastic_xml(
-        tree: ElementTree.ElementTree,
-        viscoelastic_modes: list[dict],
-    ) -> ElementTree.ElementTree:
-        root = tree.getroot()
-        if root is not None:
-            for vs_elem in root.iter("viscoelastic_series"):
-                if vs_elem.text and vs_elem.text.strip().startswith("["):
-                    vs_elem.text = None
-                    for mode in viscoelastic_modes:
-                        mode_elem = ElementTree.SubElement(vs_elem, "mode")
-                        mode_elem.set("name", mode["mode"])
-                        rt = ElementTree.SubElement(mode_elem, "relaxation_time")
-                        rt.text = str(mode["relaxation_time"])
-                        psm = ElementTree.SubElement(mode_elem, "partial_shear_modulus")
-                        psm.text = str(mode["partial_shear_modulus"])
-        return tree
-
-    def _fix_contact_xml(
-        self, tree: ElementTree.ElementTree
-    ) -> ElementTree.ElementTree:
-        """Patch each rigid contact element with the correct Uintah type,
-        velocity filename, and mu based on the master_material's part info."""
-        # Build lookup: material_index → part_info (only rigid parts have these)
-        parts_by_mat_idx = {p.material_index: p for p in self.part_infos}
-
-        root = tree.getroot()
-        if root is not None:
-            for contact_elem in root.iter("contact"):
-                type_elem = contact_elem.find("type")
-                if type_elem is None or type_elem.text != "rigid":
-                    continue
-
-                master_elem = contact_elem.find("master_material")
-                if master_elem is None or master_elem.text is None:
-                    continue
-                master_idx = int(master_elem.text.strip())
-
-                part_info = parts_by_mat_idx.get(master_idx)
-                if part_info is None or not hasattr(part_info.part, "contact_type"):
-                    # No matching rigid part — leave the contact alone
-                    continue
-
-                part = part_info.part
-                contact_type = part.contact_type
-                mu = "0.0"
-                if hasattr(part, "mu"):
-                    mu = str(part.mu)
-                filename = f"velocity_{part_info.part_unique_name}.txt"
-
-                # Patch <type>
-                type_elem.text = contact_type
-                type_index = list(contact_elem).index(type_elem)
-
-                # Insert <filename> right after <type>
-                fn_elem = ElementTree.Element("filename")
-                fn_elem.text = filename
-                contact_elem.insert(type_index + 1, fn_elem)
-
-                # Insert <mu> before <direction>
-                direction_elem = contact_elem.find("direction")
-                if direction_elem is not None:
-                    dir_index = list(contact_elem).index(direction_elem)
-                    mu_elem = ElementTree.Element("mu")
-                    mu_elem.text = mu
-                    contact_elem.insert(dir_index, mu_elem)
-        return tree
 
     @staticmethod
     def write_histogram_csv(df, f, **kwargs):

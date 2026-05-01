@@ -8,9 +8,6 @@ from io import BytesIO
 from dotenv import load_dotenv
 import yaml
 from metafold import MetafoldClient
-from metafold_graph.func import *
-from metafold_graph.func import to_dict
-from metafold_graph.func_types import Asset
 from pathlib import Path
 from numpy.typing import DTypeLike
 from simulation_configurator import (
@@ -33,6 +30,7 @@ import numpy as np
 import os
 import pandas as pd
 
+from metafold.assets import Asset
 from metafold.materials import (
     DEFAULT_PISTON_MATERIAL,
     DEFAULT_SUPPORT_MATERIAL,

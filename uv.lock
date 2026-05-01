@@ -500,7 +500,6 @@ dependencies = [
 [package.optional-dependencies]
 simulation = [
     { name = "dotenv", marker = "sys_platform == 'linux'" },
-    { name = "metafold-graph", marker = "sys_platform == 'linux'" },
     { name = "pandas", marker = "sys_platform == 'linux'" },
     { name = "plyfile", marker = "sys_platform == 'linux'" },
     { name = "pyyaml", marker = "sys_platform == 'linux'" },
@@ -526,7 +525,6 @@ requires-dist = [
     { name = "attrs", specifier = "~=23.2" },
     { name = "auth0-python", specifier = "~=4.7" },
     { name = "dotenv", marker = "extra == 'simulation'", specifier = ">=0.9.9" },
-    { name = "metafold-graph", marker = "extra == 'simulation'", specifier = ">=0.4.0", index = "https://gitlab.com/api/v4/projects/40550184/packages/pypi/simple" },
     { name = "numpy", specifier = "~=2.0" },
     { name = "pandas", marker = "extra == 'simulation'", specifier = ">=2.3.3" },
     { name = "plyfile", marker = "extra == 'simulation'", specifier = ">=1.1.3" },
@@ -549,19 +547,6 @@ dev = [
     { name = "sphinx-rtd-theme", specifier = "~=2.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12" },
     { name = "types-requests", specifier = ">=2.32.4.20260107" },
-]
-
-[[package]]
-name = "metafold-graph"
-version = "0.4.0"
-source = { registry = "https://gitlab.com/api/v4/projects/40550184/packages/pypi/simple" }
-dependencies = [
-    { name = "networkx", marker = "sys_platform == 'linux'" },
-    { name = "numpy", marker = "sys_platform == 'linux'" },
-]
-sdist = { url = "https://gitlab.com/api/v4/projects/40550184/packages/pypi/files/05f41a47a00dddceeaa29c043da4922eb9884f7996d67108397ba3c89c41d7cc/metafold_graph-0.4.0.tar.gz", hash = "sha256:05f41a47a00dddceeaa29c043da4922eb9884f7996d67108397ba3c89c41d7cc" }
-wheels = [
-    { url = "https://gitlab.com/api/v4/projects/40550184/packages/pypi/files/bb8a405a74dc9e7b079f5081fc56191cc2be06016f2740c7af2e3fb8a417230e/metafold_graph-0.4.0-py3-none-any.whl", hash = "sha256:bb8a405a74dc9e7b079f5081fc56191cc2be06016f2740c7af2e3fb8a417230e" },
 ]
 
 [[package]]
@@ -716,15 +701,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/73/78/eb2e5d067d4c054451e33eaece74cbdcb58236dc60516e73d783dae34c7e/ndindex-1.10.1-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5c3634a8df43e7928122225a3d64d850c8957bd1edf2e403907deacb478af27b", size = 614419, upload-time = "2025-11-19T20:39:43.254Z" },
     { url = "https://files.pythonhosted.org/packages/78/51/261bfb49eb7920c2a7314cacba5821930a529911dce48c7c6cd786096a5a/ndindex-1.10.1-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:9d581f931e61f182478f18bdf5edd3955899df5da4892ed0d5de547a4cfd5b6f", size = 1587517, upload-time = "2025-11-19T20:39:44.809Z" },
     { url = "https://files.pythonhosted.org/packages/ec/37/084a332ecdf8b0049151bd78001a7baf2daf7f500d043beb8a1f95d0f4e3/ndindex-1.10.1-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:78ce45106ebf67aeba99714818c721d8fd5fb9534daebd2565665a2d64b50fc9", size = 1635372, upload-time = "2025-11-19T20:39:47.231Z" },
-]
-
-[[package]]
-name = "networkx"
-version = "3.6.1"
-source = { registry = "https://gitlab.com/api/v4/groups/10637350/-/packages/pypi/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
 ]
 
 [[package]]

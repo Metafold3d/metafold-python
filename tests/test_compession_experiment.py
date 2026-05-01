@@ -179,7 +179,7 @@ class TestDownloadResults:
             s.results = []
         exp.download_results()
         for s in exp.sims:
-            s._write_results_to_zip.assert_called_once()
+            s._write_results_to_zip_v2.assert_called_once()
 
     def test_download_results_writes_combined_manifest(self, mock_sim):
         exp = CompressionExperiment(mock_sim, [VaryMesh("midsole", "mid-*.ply")], auto_run=False)
@@ -188,8 +188,8 @@ class TestDownloadResults:
         for i, s in enumerate(exp.sims):
             s.results = [{"id": f"wf-{i}", "name": f"sim_{i}"}]
         exp.download_results()
-        mock_sim._write_manifest_to_zip.assert_called_once()
-        _, passed_results = mock_sim._write_manifest_to_zip.call_args[0]
+        mock_sim._write_manifest_to_zip_v2.assert_called_once()
+        _, passed_results = mock_sim._write_manifest_to_zip_v2.call_args[0]
         assert len(passed_results) == 3
 
 

@@ -317,7 +317,7 @@ class CompressionSimulation:
     workflow_params: dict[str, Any] = {}
     workflow_assets: dict[str, Any] = {}
     workflow: Optional[Workflow] = None
-
+    use_legacy_results_format: bool = False
 
     prep_workflows: list[Workflow] = []
     prep_workflow_batch_size: int = 10
@@ -345,6 +345,7 @@ class CompressionSimulation:
         ],
         force_reupload_files=False,
         prep_workflow_batch_size: int = 10,
+        use_legacy_results_format: bool = False,
     ):
         self.simulation_name = simulation_name
         self.simulation_parameters = simulation_parameters
@@ -352,6 +353,7 @@ class CompressionSimulation:
         self.workflow_steps = self._clean_workflow_steps_input(workflow_steps)
         self.force_reupload_files = force_reupload_files
         self.prep_workflow_batch_size = prep_workflow_batch_size
+        self.use_legacy_results_format = use_legacy_results_format
 
         # build the parts list
         self.part_infos = []
@@ -654,9 +656,7 @@ class CompressionSimulation:
                 (a for a in sample_job.assets if a.filename.endswith(".bin")), None
             )
             if volume_asset is None:
-                volume_asset = next(
-                    (a for a in sample_job.assets if a.filename), None
-                )
+                volume_asset = next((a for a in sample_job.assets if a.filename), None)
             if volume_asset is not None:
                 info.volume_filename = volume_asset.filename
 
@@ -1337,8 +1337,12 @@ class CompressionSimulation:
             return
         zip_filename = self.out_dir / "out.zip"
         with ZipFile(zip_filename, "w") as zf:
-            self._write_results_to_zip(zf)
-            self._write_manifest_to_zip(zf, self.results)
+            if not self.use_legacy_results_format:
+                self._write_results_to_zip_v2(zf)
+                self._write_manifest_to_zip_v2(zf, self.results)
+            else:
+                self._write_results_to_zip(zf)
+                self._write_manifest_to_zip(zf, self.results)
 
     @staticmethod
     def _is_analysis_target(p: ExperimentPart):
@@ -1735,3 +1739,413 @@ class CompressionSimulation:
 
         with zf.open("manifest.json", "w") as f:
             f.write(json.dumps(m, indent=2).encode())
+
+    @staticmethod
+    def _mesh_data_key(part_unique_name: str) -> str:
+        """Build the data key for a part's mesh preview, e.g. 'midsole' → 'midsole_mesh'."""
+        return f"{part_unique_name}_mesh"
+
+    def _write_results_to_zip_v2(self, zf: ZipFile):
+        """New schema: ship HDF files into the zip and reference per-material
+        datasets via {name, path} entries in `data`. Mesh previews are copies
+        of the original input PLY files."""
+        for result in self.results:
+            w = self.client.workflows.get(result["id"])
+            while w.state not in ["success", "failure", "canceled"]:
+                sleep(1)
+                w = self.client.workflows.get(w.id)
+
+            if w.state != "success":
+                continue
+
+            name = self.simulation_name
+            data: dict[str, Any] = {}
+
+            # Mesh previews — copy original input files in as `original_{part}.ply`
+            for part_info in self.part_infos:
+                if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.file_path is None:
+                    continue
+                zip_path = (
+                    f"{name}/original_{part_info.part_unique_name}"
+                    f"{part_info.file_path.suffix.lower()}"
+                )
+                with (
+                    open(part_info.file_path, "rb") as src,
+                    zf.open(zip_path, "w") as dst,
+                ):
+                    copyfileobj(src, dst)
+                data[self._mesh_data_key(part_info.part.name)] = {"name": zip_path}
+
+            # Number of materials drives per-material data keys.
+            n_materials = len(self.part_infos)
+
+            with TemporaryDirectory() as tempdir:
+                tempdir_path = Path(tempdir)
+
+                # Postprocess HDFs that ship whole. Each entry:
+                # (step, asset_name, local_filename, zip_basename, dataset_root,
+                #  data_key_prefix, has_histogram)
+                full_hdf_refs = [
+                    (
+                        WorkflowStepType.VON_MISES_STRESS,
+                        "von-mises-stress.output",
+                        "von_mises.h5",
+                        "von_mises_stress",
+                        "vonMisesStress",
+                        True,
+                    ),
+                    (
+                        WorkflowStepType.EFFECTIVE_STRAIN,
+                        "effective-strain.output",
+                        "eff_strain.h5",
+                        "effective_strain",
+                        "effectiveStrain",
+                        True,
+                    ),
+                    (
+                        WorkflowStepType.PARTICLE_DISPLACEMENT,
+                        "particle-displacement.output",
+                        "part_disp.h5",
+                        "particle_displacement",
+                        "particleDisplacement",
+                        False,
+                    ),
+                ]
+
+                for (
+                    step,
+                    asset_name,
+                    basename,
+                    dataset_root,
+                    key_prefix,
+                    has_histogram,
+                ) in full_hdf_refs:
+                    if not self._contains_step(step):
+                        continue
+                    asset = w.get_asset(asset_name)
+                    if asset is None:
+                        continue
+                    local_path = tempdir_path / basename
+                    self.client.assets.download_file(asset.id, local_path)
+                    zip_path = f"{name}/{basename}"
+                    zf.write(local_path, arcname=zip_path)
+                    for i in range(n_materials):
+                        data[f"{key_prefix}{i}"] = {
+                            "name": zip_path,
+                            "path": f"/material{i}/{dataset_root}",
+                        }
+                        if has_histogram:
+                            data[f"{key_prefix}Histogram{i}"] = {
+                                "name": zip_path,
+                                "path": f"/material{i}/{dataset_root}_histogram",
+                            }
+
+                # Compress output: download whole, but ship only the position
+                # datasets to keep the zip small.
+                if self._contains_step(WorkflowStepType.COMPRESS):
+                    uo_asset = w.get_asset("compress.output")
+                    if uo_asset is not None:
+                        uo_hdf = tempdir_path / "compress.h5"
+                        self.client.assets.download_file(uo_asset.id, uo_hdf)
+
+                        pn_hdf = tempdir_path / "position.h5"
+                        with (
+                            pd.HDFStore(uo_hdf, "r") as src,
+                            pd.HDFStore(pn_hdf, "w") as dst,
+                        ):
+                            for i in range(n_materials):
+                                path = f"/material{i}/position"
+                                if path in src:
+                                    dst[path] = src[path]
+
+                        pn_zip_path = f"{name}/position.h5"
+                        zf.write(pn_hdf, arcname=pn_zip_path)
+                        for i in range(n_materials):
+                            data[f"position{i}"] = {
+                                "name": pn_zip_path,
+                                "path": f"/material{i}/position",
+                            }
+
+                # Force-displacement: ship whole and compute energy fields.
+                energy_absorbed_cumulative = None
+                loading_energy = None
+                unloading_energy = None
+                if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+                    fd_asset = w.get_asset("force-displacement.output")
+                    if fd_asset is not None:
+                        fd_hdf = tempdir_path / "force_disp.h5"
+                        self.client.assets.download_file(fd_asset.id, fd_hdf)
+                        fd_zip_path = f"{name}/force_disp.h5"
+                        zf.write(fd_hdf, arcname=fd_zip_path)
+                        data["forceDisplacement"] = {
+                            "name": fd_zip_path,
+                            "path": "/force_displacement",
+                        }
+
+                        # Compute loading/unloading energies from the curve.
+                        with pd.HDFStore(fd_hdf, "r") as store:
+                            df = store["/force_displacement"].reset_index()
+                            if len(df):
+                                energy_absorbed_cumulative = df[
+                                    "energy_absorbed_cumulative"
+                                ].iloc[-1]
+                                split_time = df.loc[
+                                    df["displacement"].abs().idxmax(), "time"
+                                ]
+                                loading = df[df["time"] <= split_time]
+                                unloading = df[df["time"] > split_time]
+                                loading_energy = (
+                                    loading["energy_absorbed_cumulative"].iloc[-1]
+                                    if len(loading)
+                                    else 0.0
+                                )
+                                unloading_energy = (
+                                    max(
+                                        loading_energy - energy_absorbed_cumulative,
+                                        0.0,
+                                    )
+                                    if len(unloading)
+                                    else 0.0
+                                )
+
+                # Stress-strain: ship whole.
+                if self._contains_step(WorkflowStepType.STRESS_STRAIN):
+                    ss_asset = w.get_asset("stress-strain.output")
+                    if ss_asset is not None:
+                        ss_hdf = tempdir_path / "stress_strain.h5"
+                        self.client.assets.download_file(ss_asset.id, ss_hdf)
+                        ss_zip_path = f"{name}/stress_strain.h5"
+                        zf.write(ss_hdf, arcname=ss_zip_path)
+                        data["stressStrain"] = {
+                            "name": ss_zip_path,
+                            "path": "/stress_strain",
+                        }
+
+            # Sum interior volumes across analysis-target parts.
+            total_volume = 0.0
+            for part_info in self.part_infos:
+                if not self._is_analysis_target(part_info.part):
+                    continue
+                metrics_job = part_info.jobs.get("metrics", "")
+                if not metrics_job:
+                    continue
+                raw = w.get_parameter(f"{metrics_job}.interior_volume")
+                if raw is not None:
+                    total_volume += float(raw)
+
+            result.update(
+                {
+                    "data": data,
+                    "volume": total_volume,
+                }
+            )
+            if energy_absorbed_cumulative is not None:
+                result["energyAbsorbed"] = round(float(energy_absorbed_cumulative), 4)
+            if loading_energy is not None:
+                result["loadingEnergy"] = round(float(loading_energy), 4)
+            if unloading_energy is not None:
+                result["unloadingEnergy"] = round(float(unloading_energy), 4)
+
+    def _write_manifest_to_zip_v2(self, zf: ZipFile, all_results: list):
+        """New schema manifest. If reference data is configured, prepend a
+        reference result entry that the viewer will display alongside the
+        sim results."""
+        self.make_manifest_v2()
+        m = copy.deepcopy(self.manifest)
+
+        results_list = list(all_results)
+
+        # Prepend reference experimental data if a reference CSV is configured.
+        if self.reference_data.csv_path.is_file():
+            reference_result = self._build_reference_result_v2(zf)
+            if reference_result is not None:
+                results_list = [reference_result] + results_list
+
+        m["results"] = results_list
+
+        with zf.open("manifest.json", "w") as f:
+            f.write(json.dumps(m, indent=2).encode())
+
+    def _build_reference_result_v2(self, zf: ZipFile) -> Optional[dict]:
+        """Read the reference CSV (expected columns: Displacement, Force),
+        write it as an HDF into the zip, and return a result entry pointing
+        at it. Returns None if the CSV can't be read."""
+        try:
+            ref_df = pd.read_csv(self.reference_data.csv_path)
+        except Exception as e:
+            print(f"WARNING: failed to read reference CSV: {e}")
+            return None
+
+        # Normalize column names to what the viewer expects.
+        rename_map = {}
+        for col in ref_df.columns:
+            lower = col.lower()
+            if lower == "displacement":
+                rename_map[col] = "displacement"
+            elif lower == "force":
+                rename_map[col] = "force"
+        ref_df = ref_df.rename(columns=rename_map)
+
+        if "displacement" not in ref_df.columns or "force" not in ref_df.columns:
+            print(
+                "WARNING: reference CSV missing 'displacement' or 'force' columns — "
+                "reference curve will not appear."
+            )
+            return None
+
+        ref_df = ref_df[["displacement", "force"]]
+
+        with TemporaryDirectory() as tempdir:
+            hdf_path = Path(tempdir) / "reference.h5"
+            with pd.HDFStore(hdf_path, "w") as store:
+                store["/reference"] = ref_df
+            zip_path = "reference.h5"
+            zf.write(hdf_path, arcname=zip_path)
+
+        return {
+            "id": "1",
+            "name": "Reference (experimental)",
+            "isExperimental": True,
+            "volume": self.reference_data.volume,
+            "energyAbsorbed": self.reference_data.energy_absorbed,
+            "loadingEnergy": self.reference_data.loading_energy,
+            "unloadingEnergy": self.reference_data.unloading_energy,
+            "data": {
+                "forceDisplacement": {
+                    "name": zip_path,
+                    "path": "/reference",
+                },
+            },
+        }
+
+    def make_manifest_v2(self):
+        """Build the new-schema manifest. References per-material data keys
+        (vonMisesStress0, vonMisesStress1, etc.) and ships partPreviewConfig
+        for each analysis-target part."""
+        self.manifest = {
+            "resultsListConfig": [
+                {"key": "name", "heading": "Name", "filtering": True},
+                {"key": "volume", "heading": "Volume (mm³)", "filtering": False},
+                {
+                    "key": "loadingEnergy",
+                    "heading": "Loading Energy (J)",
+                    "filtering": False,
+                },
+                {
+                    "key": "unloadingEnergy",
+                    "heading": "Unloading Energy (J)",
+                    "filtering": False,
+                },
+                {
+                    "key": "energyAbsorbed",
+                    "heading": "Absorbed Energy (J)",
+                    "filtering": False,
+                },
+            ],
+            "cardsConfig": {},
+            "simulationPreviewConfig": {
+                "dataSource": "position",
+                "variables": [],
+                "materialsConfig": {
+                    str(i): {
+                        "displayName": part_info.part_unique_name,
+                        **(
+                            {"useSolidColor": True}
+                            if isinstance(part_info.part, ExperimentPistonBase)
+                            else {}
+                        ),
+                    }
+                    for i, part_info in enumerate(self.part_infos)
+                },
+            },
+            "partPreviewConfig": [
+                {
+                    "displayName": part_info.part.name,
+                    "dataSource": self._mesh_data_key(part_info.part.name),
+                    "fileFormat": part_info.file_path.suffix.lstrip(".").lower(),
+                }
+                for part_info in self.part_infos
+                if self._is_analysis_target(part_info.part) and part_info.file_path
+            ],
+        }
+
+        if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+            self.manifest["simulationPreviewConfig"]["variables"].append(
+                {
+                    "displayName": "von Mises Stress",
+                    "dataSource": "vonMisesStress",
+                    "column": "v",
+                }
+            )
+        if self._contains_step(WorkflowStepType.EFFECTIVE_STRAIN):
+            self.manifest["simulationPreviewConfig"]["variables"].append(
+                {
+                    "displayName": "Effective Strain",
+                    "dataSource": "effectiveStrain",
+                    "column": "v",
+                }
+            )
+        if self._contains_step(WorkflowStepType.PARTICLE_DISPLACEMENT):
+            self.manifest["simulationPreviewConfig"]["variables"].append(
+                {
+                    "displayName": "Displacement",
+                    "dataSource": "particleDisplacement",
+                    "column": "norm",
+                }
+            )
+
+        if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+            self.manifest["cardsConfig"]["A"] = [
+                {
+                    "id": "forceDisplacement",
+                    "title": "Force-Displacement",
+                    "component": "MultiExperimentLineChart",
+                    "props": {
+                        "xColumn": "displacement",
+                        "yColumn": "force",
+                        "yMin": 0.0,
+                        "xAxisLabel": "Displacement (mm)",
+                        "yAxisLabel": "Force (N)",
+                        "dataSource": "forceDisplacement",
+                        "tooltips": [
+                            {
+                                "dataColumn": "energy_absorbed_cumulative",
+                                "title": "Energy Absorbed (J)",
+                            },
+                        ],
+                    },
+                },
+            ]
+
+        self.manifest["cardsConfig"]["B"] = []
+        if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+            rep_idx = self.get_part_info(self.representative_part).material_index
+            self.manifest["cardsConfig"]["B"].append(
+                {
+                    "id": "vonMisesStress",
+                    "title": "von Mises Stress",
+                    "component": "SingleExperimentHistogram",
+                    "props": {
+                        "dataSource": f"vonMisesStressHistogram{rep_idx}",
+                        "xAxisLabel": "von Mises Stress",
+                        "yAxisLabel": "Frequency",
+                    },
+                }
+            )
+
+        self.manifest["cardsConfig"]["C"] = [
+            {
+                "id": "energyVolume",
+                "title": "Energy Absorbed-Interior Volume",
+                "component": "MultiExperimentScatterPlot",
+                "props": {
+                    "xDataKey": "volume",
+                    "yDataKey": "energyAbsorbed",
+                    "xAxisLabel": "Interior Volume (mm³)",
+                    "yAxisLabel": "Energy Absorbed (J)",
+                    "colorScaleMeasurement": "energyAbsorbed",
+                },
+            },
+        ]

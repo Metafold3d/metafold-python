@@ -533,7 +533,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'simulation'", specifier = ">=6.0.3" },
     { name = "requests", specifier = "~=2.31" },
     { name = "scipy", specifier = "~=1.11" },
-    { name = "simulation-configurator", marker = "extra == 'simulation'", specifier = "==0.1.0", index = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/simple" },
+    { name = "simulation-configurator", marker = "extra == 'simulation'", specifier = "==0.1.1", index = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/simple" },
     { name = "tables", marker = "extra == 'simulation'", specifier = ">=3.11.1" },
 ]
 provides-extras = ["simulation"]
@@ -1104,11 +1104,11 @@ wheels = [
 
 [[package]]
 name = "simulation-configurator"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/simple" }
-sdist = { url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/files/026d7933d3f4b723413107d4b5b3601b6491797eae78b8abad21245a6f5fdb9b/simulation_configurator-0.1.0.tar.gz", hash = "sha256:026d7933d3f4b723413107d4b5b3601b6491797eae78b8abad21245a6f5fdb9b" }
+sdist = { url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/files/2e3be10f3abc7238ff427a95dbff4d38430ef82814b84add764cfd4625786a6b/simulation_configurator-0.1.1.tar.gz", hash = "sha256:2e3be10f3abc7238ff427a95dbff4d38430ef82814b84add764cfd4625786a6b" }
 wheels = [
-    { url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/files/83374d26755edfb0aebb84711162b963f0e91b688cc0842c9d9bbbb3b1de10b9/simulation_configurator-0.1.0-py3-none-any.whl", hash = "sha256:83374d26755edfb0aebb84711162b963f0e91b688cc0842c9d9bbbb3b1de10b9" },
+    { url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/files/d8769267716ae5a09a17cc3e825894674b0705ae862de2b8df7e9f1137394bdb/simulation_configurator-0.1.1-py3-none-any.whl", hash = "sha256:d8769267716ae5a09a17cc3e825894674b0705ae862de2b8df7e9f1137394bdb" },
 ]
 
 [[package]]

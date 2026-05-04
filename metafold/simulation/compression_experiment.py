@@ -39,14 +39,17 @@ class VaryMesh(ExperimentVarying):
             all_files = glob.glob(str(base_dir / self._files_or_file_pattern))
             self.files.extend(natural_sort(all_files))
         elif isinstance(self._files_or_file_pattern, List):
-            self.files.extend(str(f) for f in self._files_or_file_pattern)
+            self.files.extend(str(f) if f is not None else None for f in self._files_or_file_pattern)
         else:
             raise ValueError(f"Unrecognized file pattern {self._files_or_file_pattern}")
         self.sim_count = len(self.files)
 
     def apply_to(self, sim_index: int, sim: CompressionSimulation):
         part_info: CompressionSimulation.PartInfo = sim.get_part_info(self.part_name)
-        cast(ExperimentMesh, part_info.part).filename = self.files[sim_index]
+        if self.files[sim_index] is None:
+            part_info.disabled = True
+        else:
+            cast(ExperimentMesh, part_info.part).filename = self.files[sim_index]
         sim.resolve_file_path(part_info)
 
 
@@ -157,6 +160,10 @@ class CompressionExperiment:
             f"{self.base_simulation.simulation_name}_sim*_results.json"
         ):
             f.unlink()
+        # delete out.zip if it exists
+        out_zip = self.base_simulation.out_dir / "out.zip"
+        if out_zip.is_file():
+            out_zip.unlink()
 
     def _save_experiment_state(self):
         state = {

@@ -273,6 +273,12 @@ class CompressionSimulation:
         part_unique_name = ""
         material_index: int = 0
         material_name: str = ""
+        # When True the part participates in material-index numbering and
+        # gets a geometry/material block in the UPS, but is excluded from
+        # contacts (so it's non-interacting) and skipped in the results
+        # download. Used by VaryMesh to "null out" a mesh per-sim while
+        # keeping material indices consistent across sims.
+        disabled: bool = False
 
         def to_state_dict(self) -> dict:
             return {
@@ -282,6 +288,7 @@ class CompressionSimulation:
                 "jobs": self.jobs,
                 "is_piston": isinstance(self.part, ExperimentPistonBase),
                 "part_name": self.part.name,
+                "disabled": self.disabled,
             }
 
         def restore_from_state_dict(self, saved: dict):
@@ -289,6 +296,7 @@ class CompressionSimulation:
             self.material_index = saved["material_index"]
             self.material_name = saved["material_name"]
             self.jobs = saved["jobs"]
+            self.disabled = saved.get("disabled", False)
 
     client: MetafoldClient
     project_id: str = ""
@@ -489,7 +497,11 @@ class CompressionSimulation:
         return self.client
 
     @staticmethod
-    def _resolve_stl_path(stl_filename: str, stl_folder_path: Path, name: str) -> Path:
+    def _resolve_stl_path(
+        stl_filename: str, stl_folder_path: Path, name: str
+    ) -> Optional[Path]:
+        if stl_filename is None:
+            return None
         p = Path(stl_filename)
 
         # If it has an extension, resolve it directly
@@ -517,7 +529,8 @@ class CompressionSimulation:
                 part_info.part.filename, self.stl_folder, part_info.part_unique_name
             )
             # just in case we had a fully or partially specified filename, clean it up here
-            part_info.part.filename = part_info.file_path.name
+            if not part_info.file_path is None:
+                part_info.part.filename = part_info.file_path.name
 
     def setup_ply_files(self, stl_folder_path):
         # Folder containing your STL files
@@ -553,6 +566,8 @@ class CompressionSimulation:
 
         for part_info in batch:
             if not hasattr(part_info.part, "filename"):
+                continue
+            if part_info.part.filename is None:
                 continue
             unique_name = part_info.part_unique_name
 
@@ -785,7 +800,7 @@ class CompressionSimulation:
         )
 
         # One rigid contact per rigid body (piston + each support).
-        # Each contact pairs that rigid body with all deformable parts.
+        # Each contact pairs that rigid body with all enabled deformable parts.
         deformable_indices = [
             i
             for i, info in enumerate(self.part_infos)
@@ -793,10 +808,13 @@ class CompressionSimulation:
                 isinstance(info.part, ExperimentPistonBase)
                 or isinstance(info.part, ExperimentSupportBase)
             )
+            and not info.disabled
         ]
 
         rigid_contacts = []
         for info in self.part_infos:
+            if info.disabled:
+                continue
             if isinstance(info.part, (ExperimentPistonBase, ExperimentSupportBase)):
                 materials = [info.material_index] + deformable_indices
                 rigid_contacts.append(
@@ -809,7 +827,6 @@ class CompressionSimulation:
                         materials=materials,
                     )
                 )
-
 
         single_velocity_contact = Contact(
             type="single_velocity",
@@ -1295,6 +1312,8 @@ class CompressionSimulation:
                 for part_info in self.part_infos:
                     if not self._is_analysis_target(part_info.part):
                         continue
+                    if part_info.disabled:
+                        continue
                     if part_info.file_path is None:
                         continue
                     mat_idx = part_info.material_index
@@ -1364,6 +1383,8 @@ class CompressionSimulation:
                         return df.reset_index().set_index(["time", "id"])
 
                     for part_info in self.part_infos:
+                        if part_info.disabled:
+                            continue
                         mat_idx = part_info.material_index
                         mat_key = f"material{mat_idx}"
 
@@ -1622,6 +1643,8 @@ class CompressionSimulation:
                     total_volume = 0.0
                     for part_info in self.part_infos:
                         if self._is_analysis_target(part_info.part):
+                            if part_info.disabled:
+                                continue
                             metrics_job = part_info.jobs.get("metrics", "")
                             if metrics_job:
                                 raw = w.get_parameter(f"{metrics_job}.interior_volume")
@@ -1672,7 +1695,7 @@ class CompressionSimulation:
     def _write_results_to_zip_v2(self, zf: ZipFile):
         """New schema: ship HDF files into the zip and reference per-material
         datasets via {name, path} entries in `data`. Mesh previews are copies
-        of the original input PLY files."""
+        of the original input PLY files. Disabled parts are skipped entirely."""
         for result in self.results:
             w = self.client.workflows.get(result["id"])
             while w.state not in ["success", "failure", "canceled"]:
@@ -1688,6 +1711,8 @@ class CompressionSimulation:
             # Mesh previews — copy original input files in as `original_{part}.ply`
             for part_info in self.part_infos:
                 if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.disabled:
                     continue
                 if part_info.file_path is None:
                     continue
@@ -1756,6 +1781,8 @@ class CompressionSimulation:
                     zip_path = f"{name}/{basename}"
                     zf.write(local_path, arcname=zip_path)
                     for i in range(n_materials):
+                        if self.part_infos[i].disabled:
+                            continue
                         data[f"{key_prefix}{i}"] = {
                             "name": zip_path,
                             "path": f"/material{i}/{dataset_root}",
@@ -1780,6 +1807,8 @@ class CompressionSimulation:
                             pd.HDFStore(pn_hdf, "w") as dst,
                         ):
                             for i in range(n_materials):
+                                if self.part_infos[i].disabled:
+                                    continue
                                 path = f"/material{i}/position"
                                 if path in src:
                                     dst[path] = src[path]
@@ -1787,6 +1816,8 @@ class CompressionSimulation:
                         pn_zip_path = f"{name}/position.h5"
                         zf.write(pn_hdf, arcname=pn_zip_path)
                         for i in range(n_materials):
+                            if self.part_infos[i].disabled:
+                                continue
                             data[f"position{i}"] = {
                                 "name": pn_zip_path,
                                 "path": f"/material{i}/position",
@@ -1851,6 +1882,8 @@ class CompressionSimulation:
             total_volume = 0.0
             for part_info in self.part_infos:
                 if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.disabled:
                     continue
                 metrics_job = part_info.jobs.get("metrics", "")
                 if not metrics_job:
@@ -1991,7 +2024,9 @@ class CompressionSimulation:
                     "fileFormat": part_info.file_path.suffix.lstrip(".").lower(),
                 }
                 for part_info in self.part_infos
-                if self._is_analysis_target(part_info.part) and part_info.file_path
+                if self._is_analysis_target(part_info.part)
+                and part_info.file_path
+                and not part_info.disabled
             ],
         }
 

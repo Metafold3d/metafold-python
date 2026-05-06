@@ -458,10 +458,27 @@ class TestMakeManifestV2:
             client=MagicMock(),
         )
 
-    def test_results_list_config_has_expected_columns(self, sim_with_full_steps):
-        sim_with_full_steps.make_manifest_v2()
+    def test_results_list_config_has_name_column_always(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2(results=[])
         keys = [c["key"] for c in sim_with_full_steps.manifest["resultsListConfig"]]
-        assert keys == ["name", "volume", "loadingEnergy", "unloadingEnergy", "energyAbsorbed"]
+        assert keys == ["name"]
+
+    def test_results_list_config_has_energy_columns_when_present(self, sim_with_full_steps):
+        results = [{"volume": 1000.0, "energyAbsorbed": 5.0}]
+        sim_with_full_steps.make_manifest_v2(results=results)
+        keys = [c["key"] for c in sim_with_full_steps.manifest["resultsListConfig"]]
+        assert keys == ["name", "volume", "energyAbsorbed", "loadingEnergy", "unloadingEnergy"]
+
+    def test_card_c_present_when_results_have_energy(self, sim_with_full_steps):
+        results = [{"volume": 1000.0, "energyAbsorbed": 5.0}]
+        sim_with_full_steps.make_manifest_v2(results=results)
+        card_c = sim_with_full_steps.manifest["cardsConfig"]["C"]
+        assert len(card_c) == 1
+        assert card_c[0]["id"] == "energyVolume"
+
+    def test_card_c_absent_when_no_energy_metrics(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2(results=[])
+        assert sim_with_full_steps.manifest["cardsConfig"]["C"] == []
 
     def test_simulation_preview_data_source(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2()
@@ -529,7 +546,7 @@ class TestMakeManifestV2:
         assert "A" in sim_with_full_steps.manifest["cardsConfig"]
         assert sim_with_full_steps.manifest["cardsConfig"]["A"][0]["id"] == "forceDisplacement"
 
-    def test_card_a_absent_when_no_force_displacement(self, ply_folder, basic_parts, tmp_path):
+    def test_card_a_empty_when_no_force_displacement(self, ply_folder, basic_parts, tmp_path):
         sim = CompressionSimulation(
             parts=basic_parts,
             simulation_name="t",
@@ -539,7 +556,29 @@ class TestMakeManifestV2:
             workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
         )
         sim.make_manifest_v2()
-        assert "A" not in sim.manifest["cardsConfig"]
+        assert sim.manifest["cardsConfig"]["A"] == []
+
+
+class TestResultsHaveEnergyMetrics:
+    def test_returns_true_when_result_has_volume_and_energy(self):
+        results = [{"volume": 500.0, "energyAbsorbed": 2.1}]
+        assert CompressionSimulation._results_have_energy_metrics(results) is True
+
+    def test_returns_false_when_no_results(self):
+        assert CompressionSimulation._results_have_energy_metrics([]) is False
+
+    def test_returns_false_when_volume_missing(self):
+        results = [{"energyAbsorbed": 2.1}]
+        assert CompressionSimulation._results_have_energy_metrics(results) is False
+
+    def test_returns_false_when_energy_absorbed_missing(self):
+        results = [{"volume": 500.0}]
+        assert CompressionSimulation._results_have_energy_metrics(results) is False
+
+    def test_returns_true_when_any_result_qualifies(self):
+        results = [{"name": "a"}, {"volume": 100.0, "energyAbsorbed": 1.0}]
+        assert CompressionSimulation._results_have_energy_metrics(results) is True
+
 
 class TestWriteResultsToZipV2:
     """Tests for _write_results_to_zip_v2 using a mocked workflow.
@@ -600,7 +639,11 @@ class TestWriteResultsToZipV2:
                 prepared_sim._write_results_to_zip_v2(zf)
             buf.seek(0)
             with ZipFile(buf) as zf:
-                assert zf.namelist() == []
+                # Mesh files are always written for debugging even on failure;
+                # no HDF data files should be present.
+                names = zf.namelist()
+                assert all("original_" in n for n in names)
+                assert not any(n.endswith(".h5") for n in names)
 
     def test_mesh_previews_named_with_original_prefix(self, prepared_sim):
         prepared_sim.client.workflows.get.return_value = self._mock_success_workflow()
@@ -691,3 +734,160 @@ class TestWriteResultsToZipV2:
             with ZipFile(buf) as zf:
                 names = zf.namelist()
                 assert not any(n.endswith(".h5") for n in names)
+
+class TestSetupClient:
+    """Tests for project_id resolution and project creation in setup_client.
+
+    These mock MetafoldClient construction to avoid real network calls and
+    only verify the logic of which path is taken based on the inputs.
+    """
+
+    @pytest.fixture(autouse=True)
+    def env_vars(self, monkeypatch):
+        """Provide the env vars MetafoldClient needs so construction doesn't blow up."""
+        monkeypatch.setenv("METAFOLD_CLIENT_ID", "cid")
+        monkeypatch.setenv("METAFOLD_CLIENT_SECRET", "csec")
+        monkeypatch.setenv("METAFOLD_AUTH_DOMAIN", "auth.example.com")
+        monkeypatch.setenv("METAFOLD_BASE_URL", "https://api.example.com")
+        monkeypatch.delenv("METAFOLD_PROJECT_ID", raising=False)
+
+    @pytest.fixture
+    def patched_client_class(self, monkeypatch):
+        """Replace MetafoldClient in the module so setup_client uses a fake.
+        Returns the MagicMock class so tests can inspect call args."""
+        from metafold.simulation import compression_simulation
+        fake_class = MagicMock()
+        monkeypatch.setattr(compression_simulation, "MetafoldClient", fake_class)
+        return fake_class
+
+    def _build_sim(self, ply_folder, basic_parts, tmp_path, **kwargs):
+        """Build a sim that goes through setup_client. Don't pass `client=` so
+        the constructor calls setup_client itself."""
+        return CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            **kwargs,
+        )
+
+    def test_explicit_project_id_used_directly(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            project_id="explicit-pid",
+            create_project_if_needed=False,
+        )
+        assert sim.project_id == "explicit-pid"
+        # MetafoldClient should be constructed once, with the project_id
+        assert patched_client_class.call_count == 1
+        kwargs = patched_client_class.call_args.kwargs
+        assert kwargs["project_id"] == "explicit-pid"
+
+    def test_env_var_project_id_used_when_no_arg(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class, monkeypatch
+    ):
+        monkeypatch.setenv("METAFOLD_PROJECT_ID", "env-pid")
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            create_project_if_needed=False,
+        )
+        assert sim.project_id == "env-pid"
+        assert patched_client_class.call_args.kwargs["project_id"] == "env-pid"
+
+    def test_no_project_id_no_creation_raises(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        with pytest.raises(ValueError, match="project_id"):
+            self._build_sim(
+                ply_folder, basic_parts, tmp_path,
+                create_project_if_needed=False,
+            )
+
+    def test_existing_project_by_name_is_reused(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        # First MetafoldClient() call (no project_id) returns a client whose
+        # projects.list() finds an existing match.
+        existing = MagicMock()
+        existing.id = "existing-pid"
+        first_client = MagicMock()
+        first_client.projects.list.return_value = [existing]
+        patched_client_class.side_effect = [first_client, MagicMock()]
+
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            project_name="my_project",
+            create_project_if_needed=True,
+        )
+
+        assert sim.project_id == "existing-pid"
+        first_client.projects.list.assert_called_once_with(q="name:my_project")
+        first_client.projects.create.assert_not_called()
+        # MetafoldClient called twice — once without project_id, once with
+        assert patched_client_class.call_count == 2
+        assert patched_client_class.call_args_list[1].kwargs["project_id"] == "existing-pid"
+
+    def test_new_project_created_when_name_not_found(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        created = MagicMock()
+        created.id = "new-pid"
+        first_client = MagicMock()
+        first_client.projects.list.return_value = []
+        first_client.projects.create.return_value = created
+        patched_client_class.side_effect = [first_client, MagicMock()]
+
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            project_name="brand_new",
+            create_project_if_needed=True,
+        )
+
+        assert sim.project_id == "new-pid"
+        first_client.projects.create.assert_called_once()
+        # First positional arg is the name
+        assert first_client.projects.create.call_args.args[0] == "brand_new"
+
+    def test_auto_generated_project_name_when_create_flag_set(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        created = MagicMock()
+        created.id = "auto-pid"
+        first_client = MagicMock()
+        first_client.projects.list.return_value = []
+        first_client.projects.create.return_value = created
+        patched_client_class.side_effect = [first_client, MagicMock()]
+
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            create_project_if_needed=True,
+        )
+
+        # An auto-generated UUID-suffixed name was assigned and used
+        assert sim.project_name.startswith("experiment_")
+        first_client.projects.create.assert_called_once()
+        assert first_client.projects.create.call_args.args[0].startswith("experiment_")
+        assert sim.project_id == "auto-pid"
+
+    def test_http_error_during_list_falls_through_to_create(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        from requests import HTTPError
+        created = MagicMock()
+        created.id = "fallback-pid"
+        first_client = MagicMock()
+        first_client.projects.list.side_effect = HTTPError("404")
+        first_client.projects.create.return_value = created
+        patched_client_class.side_effect = [first_client, MagicMock()]
+
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            project_name="xyz",
+            create_project_if_needed=True,
+        )
+
+        assert sim.project_id == "fallback-pid"
+        first_client.projects.create.assert_called_once()
+    

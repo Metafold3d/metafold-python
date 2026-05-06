@@ -4,8 +4,10 @@ from enum import Enum
 from shutil import copyfileobj
 from typing import Any, Optional, Union
 from io import BytesIO
+import uuid
 
 from dotenv import load_dotenv
+from requests import HTTPError
 import yaml
 from metafold import MetafoldClient
 from pathlib import Path
@@ -19,6 +21,7 @@ from simulation_configurator import (
     Contact,
     Mpm,
 )
+from simulation_configurator.grid import Face
 from simulation_configurator.shapes import Box, File, Cylinder, Parallelepiped
 from plyfile import PlyData, PlyElement
 from tempfile import TemporaryDirectory
@@ -36,6 +39,7 @@ from metafold.materials import (
     DEFAULT_SUPPORT_MATERIAL,
     Material,
 )
+from metafold.projects import Access, ProjectType
 from metafold.utils import sha256_file
 from metafold.workflows import Workflow
 
@@ -165,7 +169,7 @@ class ExperimentParallelepiped(ExperimentPrimitive):
 @dataclass
 class ExperimentPistonBase:
     velocity: Optional[list] = field(default_factory=lambda: DEFAULT_PISTON_VELOCITY)
-    contact_type: str = "specified"
+    contact_type: str = "rigid"
     mu: float = 0.0
 
 
@@ -308,6 +312,7 @@ class CompressionSimulation:
     simulation_parameters: SimulationParameters
     piston_velocity: list[list[float]]
 
+    create_project_if_needed: bool = False
     force_reupload_files: bool = False
 
     reference_data: ReferenceData
@@ -324,9 +329,11 @@ class CompressionSimulation:
     workflow_assets: dict[str, Any] = {}
     workflow: Optional[Workflow] = None
     use_legacy_results_format: bool = False
+    project_name: str = ""
 
     prep_workflows: list[Workflow] = []
     prep_workflow_batch_size: int = 10
+    write_ups: bool = True
 
     def __init__(
         self,
@@ -335,7 +342,7 @@ class CompressionSimulation:
         project_id: str = "",
         stl_folder_path: str = "PLY",
         env_source: str = ".env.dev",
-        output_path: str = "data",
+        output_path: str = "",
         client: Optional[MetafoldClient] = None,
         simulation_parameters: SimulationParameters = SimulationParameters(),
         reference_data: ReferenceData = ReferenceData(),
@@ -351,15 +358,27 @@ class CompressionSimulation:
         ],
         force_reupload_files=False,
         prep_workflow_batch_size: int = 10,
+        create_project_if_needed: bool = True,
+        project_name: str = "",
         use_legacy_results_format: bool = False,
+        write_ups: bool = True,
     ):
+        if not output_path:
+            if project_name:
+                output_path = project_name
+            else:
+                output_path = "data"  # default
+
         self.simulation_name = simulation_name
         self.simulation_parameters = simulation_parameters
         self.reference_data = reference_data
         self.workflow_steps = self._clean_workflow_steps_input(workflow_steps)
         self.force_reupload_files = force_reupload_files
         self.prep_workflow_batch_size = prep_workflow_batch_size
+        self.write_ups = write_ups
         self.use_legacy_results_format = use_legacy_results_format
+        self.create_project_if_needed = create_project_if_needed
+        self.project_name = project_name
 
         # build the parts list
         self.part_infos = []
@@ -379,6 +398,10 @@ class CompressionSimulation:
             self.client = self.setup_client(env_source, project_id)
         else:
             self.client = client
+
+    def _write_ups(self, content: str, filename: str) -> None:
+        if self.write_ups and self.out_dir is not None:
+            (self.out_dir / filename).write_text(content)
 
     @staticmethod
     def _clean_workflow_steps_input(workflow_steps_in: list):
@@ -418,13 +441,18 @@ class CompressionSimulation:
             self.client.workflows.cancel(self.workflow.id)
             self.workflow = None
 
-    def run(self):
+    def run(self, upload_server_manifest: bool = False):
         if not self.workflow_yaml:
             self.prepare()
         self.run_workflow()
+        if upload_server_manifest:
+            self.upload_server_manifest()
 
     def download_results(self):
         self.write_results()
+        # Re-upload server manifest so it includes the now-populated
+        # volume/energy values.
+        self.upload_server_manifest()
 
     def validate_parts(self):
         for p in self.part_infos:
@@ -483,18 +511,44 @@ class CompressionSimulation:
         load_dotenv(env_source)
 
         if not project_id:
-            self.project_id = os.environ["METAFOLD_PROJECT_ID"]
+            self.project_id = os.environ.get("METAFOLD_PROJECT_ID", "")
         else:
             self.project_id = project_id
 
-        self.client = MetafoldClient(
-            project_id=self.project_id,
-            client_id=os.environ["METAFOLD_CLIENT_ID"],
-            client_secret=os.environ["METAFOLD_CLIENT_SECRET"],
-            auth_domain=os.environ["METAFOLD_AUTH_DOMAIN"],
-            base_url=os.environ["METAFOLD_BASE_URL"],
-        )
-        return self.client
+        if not project_id and (self.project_name or self.create_project_if_needed):
+            if self.project_name == "":
+                self.project_name = "experiment_" + str(uuid.uuid4())
+
+            # create the client without a project id
+            self.client = MetafoldClient(
+                client_id=os.environ["METAFOLD_CLIENT_ID"],
+                client_secret=os.environ["METAFOLD_CLIENT_SECRET"],
+                auth_domain=os.environ["METAFOLD_AUTH_DOMAIN"],
+                base_url=os.environ["METAFOLD_BASE_URL"],
+            )
+            projects_by_name = []
+            try:
+                projects_by_name = self.client.projects.list(q=f'name:{self.project_name}')
+            except HTTPError as e:
+                projects_by_name = []
+            if projects_by_name:
+                self.project_id = projects_by_name[0].id
+            elif self.create_project_if_needed:
+                created_project = self.client.projects.create(self.project_name, access=Access.PRIVATE, type=ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT)
+                if created_project:
+                    self.project_id = created_project.id
+
+        if self.project_id:
+            self.client = MetafoldClient(
+                project_id=self.project_id,
+                client_id=os.environ["METAFOLD_CLIENT_ID"],
+                client_secret=os.environ["METAFOLD_CLIENT_SECRET"],
+                auth_domain=os.environ["METAFOLD_AUTH_DOMAIN"],
+                base_url=os.environ["METAFOLD_BASE_URL"],
+            )
+            return self.client
+        else:
+            raise ValueError('Must have one of project_id, project_name, or create_project_if_needed ')
 
     @staticmethod
     def _resolve_stl_path(
@@ -618,7 +672,7 @@ class CompressionSimulation:
 
         # Launch all batch workflows in parallel
         self.prep_workflows = []
-        for batch in batches:
+        for i, batch in enumerate(batches):
             workflow_yaml, params, assets = self._build_prep_workflow_for_batch(batch)
             wf = self.client.workflows.run_async(
                 workflow_yaml, parameters=params, assets=assets
@@ -729,7 +783,12 @@ class CompressionSimulation:
                 "patches": self.simulation_parameters.patches,
             }
         )
-        grid.add(BoundaryConditions(fixed=True))
+        bcs = BoundaryConditions()
+        for side in ["x-", "x+", "y-", "y+"]:
+            bcs._sub_elements[side] = Face.fixed(side)
+        for side in ["z-", "z+"]:
+            bcs._sub_elements[side] = Face.unfixed(side)
+        grid.add(bcs)
 
         store = GeometryStore()
 
@@ -816,7 +875,6 @@ class CompressionSimulation:
             if info.disabled:
                 continue
             if isinstance(info.part, (ExperimentPistonBase, ExperimentSupportBase)):
-                materials = [info.material_index] + deformable_indices
                 rigid_contacts.append(
                     Contact(
                         type=info.part.contact_type,
@@ -824,7 +882,7 @@ class CompressionSimulation:
                         mu=info.part.mu,
                         master_material=info.material_index,
                         direction=[1, 1, 1],
-                        materials=materials,
+                        materials=deformable_indices,
                     )
                 )
 
@@ -1056,6 +1114,8 @@ class CompressionSimulation:
         self.workflow_yaml = yaml.dump(
             {"jobs": self.workflow_jobs}, default_flow_style=False, sort_keys=False
         )
+        ups_str = self._dump_xml(self.ups, encoding="ISO-8859-1", xml_declaration=True)
+        self._write_ups(ups_str, f"{self.simulation_name}.ups")
 
         return self.workflow_yaml, self.workflow_params
 
@@ -1137,7 +1197,7 @@ class CompressionSimulation:
         ]
         self.manifest = {
             "resultsListConfig": manifest_config,
-            "cardsConfig": {},
+            "cardsConfig": {"A": [], "B": [], "C": []},
             "simulationPreviewConfig": {
                 "variables": [
                     {"key": "vonMisesStress", "displayName": "von Mises Stress"},
@@ -1493,11 +1553,6 @@ class CompressionSimulation:
                         )  # bring time back as a plain column for groupby
 
                     # ----------------------------------------------------------
-                    # Save per-material CSVs for the dashboard (still material 1
-                    # only for stress/strain histograms, as the dashboard expects)
-                    # ----------------------------------------------------------
-                    # TODO! Maybe we can support multiple material histograms now?  THis is hard
-                    # coded to just material 1
                     if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
                         assert vm_hdf is not None
                         with pd.HDFStore(vm_hdf) as store:
@@ -1664,6 +1719,10 @@ class CompressionSimulation:
                     if unloading_energy is not None:
                         result["unloadingEnergy"] = round(unloading_energy, 4)
 
+    @staticmethod
+    def _results_have_energy_metrics(results: list) -> bool:
+        return any("volume" in r and "energyAbsorbed" in r for r in results)
+
     def _write_manifest_to_zip(self, zf: ZipFile, all_results: list):
         reference_result = {
             "id": "1",
@@ -1696,6 +1755,25 @@ class CompressionSimulation:
         """New schema: ship HDF files into the zip and reference per-material
         datasets via {name, path} entries in `data`. Mesh previews are copies
         of the original input PLY files. Disabled parts are skipped entirely."""
+        name = self.simulation_name
+
+        # Always write mesh files regardless of workflow outcome, for debugging.
+        mesh_data: dict[str, Any] = {}
+        for part_info in self.part_infos:
+            if part_info.file_path is None:
+                continue
+            zip_path = (
+                f"{name}/original_{part_info.part_unique_name}"
+                f"{part_info.file_path.suffix.lower()}"
+            )
+            with (
+                open(part_info.file_path, "rb") as src,
+                zf.open(zip_path, "w") as dst,
+            ):
+                copyfileobj(src, dst)
+            if self._is_analysis_target(part_info.part) and not part_info.disabled:
+                mesh_data[self._mesh_data_key(part_info.part.name)] = {"name": zip_path}
+
         for result in self.results:
             w = self.client.workflows.get(result["id"])
             while w.state not in ["success", "failure", "canceled"]:
@@ -1705,27 +1783,7 @@ class CompressionSimulation:
             if w.state != "success":
                 continue
 
-            name = self.simulation_name
-            data: dict[str, Any] = {}
-
-            # Mesh previews — copy original input files in as `original_{part}.ply`
-            for part_info in self.part_infos:
-                if not self._is_analysis_target(part_info.part):
-                    continue
-                if part_info.disabled:
-                    continue
-                if part_info.file_path is None:
-                    continue
-                zip_path = (
-                    f"{name}/original_{part_info.part_unique_name}"
-                    f"{part_info.file_path.suffix.lower()}"
-                )
-                with (
-                    open(part_info.file_path, "rb") as src,
-                    zf.open(zip_path, "w") as dst,
-                ):
-                    copyfileobj(src, dst)
-                data[self._mesh_data_key(part_info.part.name)] = {"name": zip_path}
+            data: dict[str, Any] = dict(mesh_data)
 
             # Number of materials drives per-material data keys.
             n_materials = len(self.part_infos)
@@ -1734,8 +1792,7 @@ class CompressionSimulation:
                 tempdir_path = Path(tempdir)
 
                 # Postprocess HDFs that ship whole. Each entry:
-                # (step, asset_name, local_filename, zip_basename, dataset_root,
-                #  data_key_prefix, has_histogram)
+                # (step, asset_name, basename, dataset_root, key_prefix, has_histogram)
                 full_hdf_refs = [
                     (
                         WorkflowStepType.VON_MISES_STRESS,
@@ -1909,7 +1966,7 @@ class CompressionSimulation:
         """New schema manifest. If reference data is configured, prepend a
         reference result entry that the viewer will display alongside the
         sim results."""
-        self.make_manifest_v2()
+        self.make_manifest_v2(results=list(all_results))
         m = copy.deepcopy(self.manifest)
 
         results_list = list(all_results)
@@ -1924,6 +1981,156 @@ class CompressionSimulation:
 
         with zf.open("manifest.json", "w") as f:
             f.write(json.dumps(m, indent=2).encode())
+
+    def _build_job_id_lookup(self, workflow: Workflow) -> dict[str, str]:
+        """Build a {local_job_name: server_job_id} lookup for the given workflow.
+        Used when assembling the server-side manifest that references assets
+        by jobId/assetName."""
+        lookup: dict[str, str] = {}
+        for job_id in workflow.jobs:
+            job = self.client.jobs.get(job_id)
+            if job is None or job.name is None:
+                continue
+            lookup[job.name] = job_id
+        return lookup
+
+    @property
+    def server_manifest_filename(self) -> Path:
+        assert self.out_dir is not None
+        return self.out_dir / f"manifest.json"
+
+    def _build_server_data_for_workflow(self, workflow_id: str) -> dict[str, Any]:
+        workflow = self.client.workflows.get(workflow_id)
+        job_id_lookup = self._build_job_id_lookup(workflow)
+
+        server_data: dict[str, Any] = {}
+
+        # Mesh previews — reference uploaded source asset by filename.
+        for part_info in self.part_infos:
+            if not self._is_analysis_target(part_info.part):
+                continue
+            if part_info.disabled:
+                continue
+            if part_info.file_path is None:
+                continue
+            server_data[self._mesh_data_key(part_info.part.name)] = {
+                "name": part_info.file_path.name,
+            }
+
+        n_materials = len(self.part_infos)
+
+        # Per-material HDF blocks. Mirrors the layout in _write_results_to_zip_v2.
+        full_hdf_refs = [
+            (
+                WorkflowStepType.VON_MISES_STRESS,
+                "von_mises_stress",
+                "vonMisesStress",
+                True,
+                "von-mises-stress",
+            ),
+            (
+                WorkflowStepType.EFFECTIVE_STRAIN,
+                "effective_strain",
+                "effectiveStrain",
+                True,
+                "effective-strain",
+            ),
+            (
+                WorkflowStepType.PARTICLE_DISPLACEMENT,
+                "particle_displacement",
+                "particleDisplacement",
+                False,
+                "particle-displacement",
+            ),
+        ]
+        for step, dataset_root, key_prefix, has_histogram, local_job in full_hdf_refs:
+            if not self._contains_step(step):
+                continue
+            job_id = job_id_lookup.get(local_job, "")
+            for i in range(n_materials):
+                if self.part_infos[i].disabled:
+                    continue
+                server_data[f"{key_prefix}{i}"] = {
+                    "jobId": job_id,
+                    "assetName": "output",
+                    "path": f"/material{i}/{dataset_root}",
+                }
+                if has_histogram:
+                    server_data[f"{key_prefix}Histogram{i}"] = {
+                        "jobId": job_id,
+                        "assetName": "output",
+                        "path": f"/material{i}/{dataset_root}_histogram",
+                    }
+
+        if self._contains_step(WorkflowStepType.COMPRESS):
+            job_id = job_id_lookup.get("compress", "")
+            for i in range(n_materials):
+                if self.part_infos[i].disabled:
+                    continue
+                server_data[f"position{i}"] = {
+                    "jobId": job_id,
+                    "assetName": "output",
+                    "path": f"/material{i}/position",
+                }
+
+        if self._contains_step(WorkflowStepType.FORCE_DISPLACEMENT):
+            server_data["forceDisplacement"] = {
+                "jobId": job_id_lookup.get("force-displacement", ""),
+                "assetName": "output",
+                "path": "/force_displacement",
+            }
+
+        if self._contains_step(WorkflowStepType.STRESS_STRAIN):
+            server_data["stressStrain"] = {
+                "jobId": job_id_lookup.get("stress-strain", ""),
+                "assetName": "output",
+                "path": "/stress_strain",
+            }
+
+        return server_data
+
+    def _write_server_manifest_for_pairs(
+        self, pairs: list[tuple["CompressionSimulation", dict]]
+    ) -> Optional[dict]:
+        """Shared manifest-write path. `pairs` is a list of (sim, result) tuples;
+        each result's server data is built from its associated sim's part_infos.
+        Used by both single-sim and experiment-level manifest writes."""
+        server_results = []
+        for sim, result in pairs:
+            wf_id = result.get("id")
+            if not wf_id:
+                continue
+            server_result = {k: v for k, v in result.items() if k != "data"}
+            try:
+                server_result["data"] = sim._build_server_data_for_workflow(wf_id)
+            except Exception as e:
+                print(f"WARNING: couldn't build server data for {wf_id}: {e}")
+                server_result["data"] = {}
+            server_results.append(server_result)
+
+        self.make_manifest_v2(results=server_results)
+        manifest = copy.deepcopy(self.manifest)
+        manifest["results"] = server_results
+        self.server_manifest_filename.write_bytes(
+            json.dumps(manifest, indent=2).encode()
+        )
+        return manifest
+
+    def write_server_manifest(self) -> Optional[dict]:
+        """Build and write a server manifest covering this sim's own results."""
+        if not self.results:
+            print(f"No results for '{self.simulation_name}' — nothing to write.")
+            return None
+        pairs = [(self, r) for r in self.results]
+        return self._write_server_manifest_for_pairs(pairs)
+
+    def upload_server_manifest(self) -> None:
+        """Build, write, and set the server manifest as project data."""
+        manifest = self.write_server_manifest()
+        if manifest is None:
+            return
+        self.client.projects.update(data=manifest)
+        print(f"Uploaded server manifest to project {self.project_id}")
 
     def _build_reference_result_v2(self, zf: ZipFile) -> Optional[dict]:
         """Read the reference CSV (expected columns: Displacement, Force),
@@ -1977,31 +2184,15 @@ class CompressionSimulation:
             },
         }
 
-    def make_manifest_v2(self):
+    def make_manifest_v2(self, results: list = []):
         """Build the new-schema manifest. References per-material data keys
         (vonMisesStress0, vonMisesStress1, etc.) and ships partPreviewConfig
         for each analysis-target part."""
         self.manifest = {
             "resultsListConfig": [
                 {"key": "name", "heading": "Name", "filtering": True},
-                {"key": "volume", "heading": "Volume (mm³)", "filtering": False},
-                {
-                    "key": "loadingEnergy",
-                    "heading": "Loading Energy (J)",
-                    "filtering": False,
-                },
-                {
-                    "key": "unloadingEnergy",
-                    "heading": "Unloading Energy (J)",
-                    "filtering": False,
-                },
-                {
-                    "key": "energyAbsorbed",
-                    "heading": "Absorbed Energy (J)",
-                    "filtering": False,
-                },
             ],
-            "cardsConfig": {},
+            "cardsConfig": {"A": [], "B": [], "C": []},
             "simulationPreviewConfig": {
                 "dataSource": "position",
                 "variables": [],
@@ -2094,17 +2285,42 @@ class CompressionSimulation:
                 }
             )
 
-        self.manifest["cardsConfig"]["C"] = [
-            {
-                "id": "energyVolume",
-                "title": "Energy Absorbed-Interior Volume",
-                "component": "MultiExperimentScatterPlot",
-                "props": {
-                    "xDataKey": "volume",
-                    "yDataKey": "energyAbsorbed",
-                    "xAxisLabel": "Interior Volume (mm³)",
-                    "yAxisLabel": "Energy Absorbed (J)",
-                    "colorScaleMeasurement": "energyAbsorbed",
+        if self._results_have_energy_metrics(results):
+            self.manifest["resultsListConfig"].append(
+                {"key": "volume", "heading": "Volume (mm³)", "filtering": False},
+            )
+            self.manifest["resultsListConfig"].append(
+                {
+                    "key": "energyAbsorbed",
+                    "heading": "Absorbed Energy (J)",
+                    "filtering": False,
+                }
+            )    
+            self.manifest["resultsListConfig"].append(
+                            {
+                    "key": "loadingEnergy",
+                    "heading": "Loading Energy (J)",
+                    "filtering": False,
+                }
+            )
+            self.manifest["resultsListConfig"].append(
+                {
+                    "key": "unloadingEnergy",
+                    "heading": "Unloading Energy (J)",
+                    "filtering": False,
+                }
+            )
+            self.manifest["cardsConfig"]["C"] = [
+                {
+                    "id": "energyVolume",
+                    "title": "Energy Absorbed-Interior Volume",
+                    "component": "MultiExperimentScatterPlot",
+                    "props": {
+                        "xDataKey": "volume",
+                        "yDataKey": "energyAbsorbed",
+                        "xAxisLabel": "Interior Volume (mm³)",
+                        "yAxisLabel": "Energy Absorbed (J)",
+                        "colorScaleMeasurement": "energyAbsorbed",
+                    },
                 },
-            },
-        ]
+            ]

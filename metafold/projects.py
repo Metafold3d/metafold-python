@@ -18,10 +18,30 @@ class Access(Enum):
     PUBLIC = "public"
 
 
-def check_access(a: str) -> Access:
+class ProjectType(Enum):
+    """Project type.
+
+    Attributes:
+        DIGITAL_TEST_BENCH_EXPERIMENT: digital test bench experiment.
+        UNSPECIFIED: unspecified legacy project.
+    """
+    UNSPECIFIED = "unspecified"
+    DIGITAL_TEST_BENCH_EXPERIMENT = "digital_test_bench_experiment"
+
+
+def check_access(a: str | Access) -> Access:
+    if isinstance(a, Access):
+        return a
     if a.upper() not in Access.__dict__:
         raise ValueError("Expected 'private' or 'public'")
     return Access[a.upper()]
+
+def check_project_type(a: str | ProjectType) -> ProjectType:
+    if isinstance(a, ProjectType):
+        return a
+    if a.upper() not in ProjectType.__dict__:
+        raise ValueError("Expected 'digital_test_bench_experiment' or 'unspecified'")
+    return ProjectType[a.upper()]
 
 
 @frozen(kw_only=True)
@@ -45,6 +65,7 @@ class Project:
     access: Access = field(converter=check_access)
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
+    type: ProjectType = field(converter=check_project_type, default=ProjectType.UNSPECIFIED) 
     thumbnail: str | None = None
     project: dict[str, Any] | None = None
     graph: dict[str, Any] | None = None
@@ -90,6 +111,7 @@ class ProjectsEndpoint:
     def create(
         self, name: str,
         access: Access | str = Access.PRIVATE,
+        type: ProjectType | str = ProjectType.UNSPECIFIED,
         data: dict[str, Any] | None = None,
     ) -> Project:
         """Create a project.
@@ -105,7 +127,9 @@ class ProjectsEndpoint:
         """
         if isinstance(access, str):
             access = check_access(access)
-        payload = asdict(name=name, access=access.value, project=data)
+        if isinstance(type, str):
+            type = check_project_type(type)
+        payload = asdict(name=name, access=access.value, project=data, type=type.value)
         r: Response = self._client.post("/projects", json=payload)
         return Project(**r.json())
 

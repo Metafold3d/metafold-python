@@ -33,6 +33,94 @@ class RigidParams(ParamsBase):
 
 
 @dataclass
+class HypoElasticParams(ParamsBase):
+    G: float
+    K: float
+
+    @classmethod
+    def get_type(self):
+        return "hypo_elastic"
+
+    def to_dict(self):
+        return {"G": self.G, "K": self.K}
+
+
+@dataclass
+class ViscoTransIsoHyperParams(ParamsBase):
+    bulk_modulus: float
+    c1: float
+    c2: float
+    c3: float
+    c4: float
+    c5: float
+    fiber_stretch: float
+    direction_of_symm: List[float]
+    failure_option: int
+    max_fiber_strain: float
+    max_matrix_strain: float
+    y1: float
+    y2: float
+    y3: float
+    y4: float
+    y5: float
+    y6: float
+    t1: float
+    t2: float
+    t3: float
+    t4: float
+    t5: float
+    t6: float
+
+    @classmethod
+    def get_type(cls):
+        return "visco_trans_iso_hyper"
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "ViscoTransIsoHyperParams":
+        dos = d["direction_of_symm"]
+        direction = [float(x) for x in dos.split()] if isinstance(dos, str) else [float(x) for x in dos]
+        return cls(
+            bulk_modulus=d["bulk_modulus"],
+            c1=d["c1"], c2=d["c2"], c3=d["c3"], c4=d["c4"], c5=d["c5"],
+            fiber_stretch=d["fiber_stretch"],
+            direction_of_symm=direction,
+            failure_option=d["failure_option"],
+            max_fiber_strain=d["max_fiber_strain"],
+            max_matrix_strain=d["max_matrix_strain"],
+            y1=d["y1"], y2=d["y2"], y3=d["y3"], y4=d["y4"], y5=d["y5"], y6=d["y6"],
+            t1=d["t1"], t2=d["t2"], t3=d["t3"], t4=d["t4"], t5=d["t5"], t6=d["t6"],
+        )
+
+    def to_dict(self):
+        return {
+            "bulk_modulus": float(self.bulk_modulus),
+            "c1": float(self.c1),
+            "c2": float(self.c2),
+            "c3": float(self.c3),
+            "c4": float(self.c4),
+            "c5": float(self.c5),
+            "fiber_stretch": float(self.fiber_stretch),
+            # Emit as a numeric list so simulation_configurator serialises it correctly
+            "direction_of_symm": [float(x) for x in self.direction_of_symm],
+            "failure_option": int(self.failure_option),
+            "max_fiber_strain": float(self.max_fiber_strain),
+            "max_matrix_strain": float(self.max_matrix_strain),
+            "y1": float(self.y1),
+            "y2": float(self.y2),
+            "y3": float(self.y3),
+            "y4": float(self.y4),
+            "y5": float(self.y5),
+            "y6": float(self.y6),
+            "t1": float(self.t1),
+            "t2": float(self.t2),
+            "t3": float(self.t3),
+            "t4": float(self.t4),
+            "t5": float(self.t5),
+            "t6": float(self.t6),
+        }
+
+
+@dataclass
 class CompMooneyRivlinParams(ParamsBase):
     he_constant_1: float
     he_constant_2: float
@@ -220,10 +308,14 @@ class ConstitutiveModel:
         UCNHParams,
         CompNeoHookParams,
         ElasticPlasticParams,
+        HypoElasticParams,
+        ViscoTransIsoHyperParams,
     ]
 
     def to_dict(self):
         return {"type": self.params.get_type(), "params": self.params.to_dict()}
+
+
 
 
 @dataclass
@@ -257,6 +349,8 @@ class Material:
             MaxwellWeichertParams,
             CompNeoHookParams,
             ElasticPlasticParams,
+            HypoElasticParams,
+            ViscoTransIsoHyperParams,
         ]
         PARAMS_CLASSES = {c.get_type(): c for c in params_classes}
         cm = d["constitutive_model"]

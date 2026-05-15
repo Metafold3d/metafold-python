@@ -121,9 +121,12 @@ class CompressionExperiment:
         force_rerun: bool = False,
         auto_run: bool = True,
         auto_download_results: bool = True,
+        auto_upload_server_manifest: bool = True,
         use_legacy_results_format: bool = False,
+        write_ups: bool = True,
     ):
         simulation.use_legacy_results_format = use_legacy_results_format
+        simulation.write_ups = write_ups
         self.use_legacy_results_format = use_legacy_results_format
         self.base_simulation = simulation
         self.varying = varying
@@ -138,7 +141,7 @@ class CompressionExperiment:
 
         if auto_run:
             self.prepare()
-            self.run()
+            self.run(auto_upload_server_manifest)
             if auto_download_results:
                 self.download_results()
 
@@ -247,7 +250,7 @@ class CompressionExperiment:
         self.base_simulation.collect_sampled_volumes(self.experiment_part_infos)
         self._log("Prepare complete.")
 
-    def run(self):
+    def run(self, upload_server_manifest: bool = False):
         self._log("=== RUN EXPERIMENT ===")
 
         # If prepare() short-circuited because state exists, skip run too
@@ -261,6 +264,8 @@ class CompressionExperiment:
                 self._log(
                     "All simulations already dispatched. Use force_rerun=True to redo."
                 )
+                if upload_server_manifest:
+                    self.upload_server_manifest()
                 return
 
         for sim_index, local_sim in enumerate(self.sims):
@@ -274,6 +279,9 @@ class CompressionExperiment:
 
         self._save_experiment_state()
         self._log("All workflows dispatched.")
+
+        if upload_server_manifest:
+            self.upload_server_manifest()
 
     def cancel(self):
         self._log("=== CANCEL EXPERIMENT ===")
@@ -332,3 +340,31 @@ class CompressionExperiment:
                 self.base_simulation._write_manifest_to_zip(zf, all_results)
 
         print(f"Experiment complete. Results written to: {zip_filename}")
+
+        # After download, the per-sim results have volume/energy populated.
+        # Re-upload server manifest with the filled-in values.
+        self.upload_server_manifest()
+
+    @property
+    def server_manifest_filename(self) -> Path:
+        return self.base_simulation.server_manifest_filename
+
+    def write_server_manifest(self):
+        """Build and write a combined server manifest across all sub-sims."""
+        self._log("=== WRITE SERVER MANIFEST ===")
+        if not self.sims:
+            self._log("No sims in memory — loading persisted experiment state...")
+            self._rebuild_sims_from_state()
+            if not self.sims:
+                print("No experiment state found — run prepare() and run() first.")
+                return None
+        pairs = [(s, r) for s in self.sims for r in s.results]
+        return self.base_simulation._write_server_manifest_for_pairs(pairs)
+
+    def upload_server_manifest(self) -> None:
+        """Build, write, and set the combined experiment server manifest as project data."""
+        manifest = self.write_server_manifest()
+        if manifest is None:
+            return
+        self.base_simulation.client.projects.update(data=manifest)
+        print(f"Uploaded server manifest to project {self.base_simulation.project_id}")

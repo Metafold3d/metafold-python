@@ -380,6 +380,12 @@ jobs:
     - compress
     assets:
       data: compress
+  energy-metrics:
+    type: sim/postprocess/energy-metrics
+    needs:
+    - force-displacement
+    assets:
+      data: force-displacement
 """
         assert yaml_str.strip() == expected_yaml.strip()
 
@@ -461,24 +467,43 @@ class TestMakeManifestV2:
     def test_results_list_config_has_name_column_always(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2(results=[])
         keys = [c["key"] for c in sim_with_full_steps.manifest["resultsListConfig"]]
-        assert keys == ["name"]
+        assert "name" in keys
 
-    def test_results_list_config_has_energy_columns_when_present(self, sim_with_full_steps):
-        results = [{"volume": 1000.0, "energyAbsorbed": 5.0}]
-        sim_with_full_steps.make_manifest_v2(results=results)
+    def test_results_list_config_has_energy_columns_when_step_present(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2(results=[])
         keys = [c["key"] for c in sim_with_full_steps.manifest["resultsListConfig"]]
         assert keys == ["name", "volume", "energyAbsorbed", "loadingEnergy", "unloadingEnergy"]
 
-    def test_card_c_present_when_results_have_energy(self, sim_with_full_steps):
-        results = [{"volume": 1000.0, "energyAbsorbed": 5.0}]
-        sim_with_full_steps.make_manifest_v2(results=results)
+    def test_results_list_config_no_energy_columns_when_step_absent(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2(results=[])
+        keys = [c["key"] for c in sim.manifest["resultsListConfig"]]
+        assert keys == ["name"]
+
+    def test_card_c_present_when_energy_metrics_step_present(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2(results=[])
         card_c = sim_with_full_steps.manifest["cardsConfig"]["C"]
         assert len(card_c) == 1
         assert card_c[0]["id"] == "energyVolume"
 
-    def test_card_c_absent_when_no_energy_metrics(self, sim_with_full_steps):
-        sim_with_full_steps.make_manifest_v2(results=[])
-        assert sim_with_full_steps.manifest["cardsConfig"]["C"] == []
+    def test_card_c_absent_when_no_energy_metrics(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2(results=[])
+        assert sim.manifest["cardsConfig"]["C"] == []
 
     def test_simulation_preview_data_source(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2()
@@ -560,24 +585,26 @@ class TestMakeManifestV2:
 
 
 class TestResultsHaveEnergyMetrics:
-    def test_returns_true_when_result_has_volume_and_energy(self):
-        results = [{"volume": 500.0, "energyAbsorbed": 2.1}]
-        assert CompressionSimulation._results_have_energy_metrics(results) is True
+    def test_returns_true_when_energy_metrics_step_present(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        assert sim._results_have_energy_metrics([]) is True
 
-    def test_returns_false_when_no_results(self):
-        assert CompressionSimulation._results_have_energy_metrics([]) is False
-
-    def test_returns_false_when_volume_missing(self):
-        results = [{"energyAbsorbed": 2.1}]
-        assert CompressionSimulation._results_have_energy_metrics(results) is False
-
-    def test_returns_false_when_energy_absorbed_missing(self):
-        results = [{"volume": 500.0}]
-        assert CompressionSimulation._results_have_energy_metrics(results) is False
-
-    def test_returns_true_when_any_result_qualifies(self):
-        results = [{"name": "a"}, {"volume": 100.0, "energyAbsorbed": 1.0}]
-        assert CompressionSimulation._results_have_energy_metrics(results) is True
+    def test_returns_false_when_energy_metrics_step_absent(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        assert sim._results_have_energy_metrics([]) is False
 
 
 class TestWriteResultsToZipV2:

@@ -239,6 +239,7 @@ class WorkflowStepType(Enum):
     FORCE_DISPLACEMENT = "force_displacement"
     STRESS_STRAIN = "stress_strain"
     PARTICLE_DISPLACEMENT = "particle_displacement"
+    ENERGY_METRICS = "energy_metrics"
 
 
 class WorkflowStep:
@@ -355,6 +356,7 @@ class CompressionSimulation:
             WorkflowStep(WorkflowStepType.FORCE_DISPLACEMENT),
             WorkflowStep(WorkflowStepType.STRESS_STRAIN),
             WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
+            WorkflowStep(WorkflowStepType.ENERGY_METRICS),
         ],
         force_reupload_files=False,
         prep_workflow_batch_size: int = 10,
@@ -450,9 +452,6 @@ class CompressionSimulation:
 
     def download_results(self):
         self.write_results()
-        # Re-upload server manifest so it includes the now-populated
-        # volume/energy values.
-        self.upload_server_manifest()
 
     def validate_parts(self):
         for p in self.part_infos:
@@ -1077,6 +1076,11 @@ class CompressionSimulation:
             part_infos, "compress", "particle-displacement", "position"
         )
 
+    def _add_to_workflow_energy_metrics(self, part_infos: list[PartInfo]):
+        self._add_to_workflow_postprocess(
+            part_infos, "force-displacement", "energy-metrics"
+        )
+
     def build_workflow(self, name_suffix=""):
         self.workflow_yaml = ""
         self.workflow_params = {}
@@ -1108,6 +1112,8 @@ class CompressionSimulation:
                 self._add_to_workflow_stress_strain(part_infos_for_step)
             elif step.type == WorkflowStepType.PARTICLE_DISPLACEMENT:
                 self._add_to_workflow_particle_displacement(part_infos_for_step)
+            elif step.type == WorkflowStepType.ENERGY_METRICS:
+                self._add_to_workflow_energy_metrics(part_infos_for_step)
             elif step.type == WorkflowStepType.COMPUTE_BVH:
                 pass  # this is done on the prep workflow, not here
 
@@ -1594,6 +1600,7 @@ class CompressionSimulation:
                                 data["effectiveStrainHistogram"] = filename
 
                     # Force-displacement (feeds card A and card B)
+                    df = None
                     energy_absorbed_cumulative = None
                     loading_energy = None
                     unloading_energy = None
@@ -1611,34 +1618,20 @@ class CompressionSimulation:
                             filename = f"{name}/forceDisplacement.csv"
                             with zf.open(filename, "w") as f:
                                 df.to_csv(f)
-                                energy_absorbed_cumulative = (
-                                    df["energy_absorbed_cumulative"].iloc[-1]
-                                    if len(df)
-                                    else 0.0
-                                )
                             data["forceDisplacement"] = filename
 
-                            # Split at max compression (turning point in displacement)
-                            # rather than max_time/2 so loading/unloading stay correct
-                            # even when cycle timing changes.
-                            disp0 = df["displacement"].iloc[0]
-                            split_idx = (df["displacement"] - disp0).abs().idxmax()
-                            split_time = df.loc[split_idx, "time"]
-                            loading = df[df["time"] <= split_time]
-                            unloading = df[df["time"] > split_time]
+                    if self._contains_step(WorkflowStepType.ENERGY_METRICS):
+                        raw_energy_absorbed = w.get_parameter("energy-metrics.energy_absorbed")
+                        raw_loading_energy = w.get_parameter("energy-metrics.loading_energy")
+                        raw_unloading_energy = w.get_parameter("energy-metrics.unloading_energy")
+                        if raw_energy_absorbed is not None:
+                            energy_absorbed_cumulative = float(raw_energy_absorbed)
+                        if raw_loading_energy is not None:
+                            loading_energy = float(raw_loading_energy)
+                        if raw_unloading_energy is not None:
+                            unloading_energy = float(raw_unloading_energy)
 
-                            loading_energy = (
-                                loading["energy_absorbed_cumulative"].iloc[-1]
-                                if len(loading)
-                                else 0.0
-                            )
-                            final_energy = (
-                                df["energy_absorbed_cumulative"].iloc[-1]
-                                if len(df)
-                                else 0.0
-                            )
-                            unloading_energy = max(0.0, loading_energy - final_energy)
-
+                        if raw_energy_absorbed is not None:
                             filename = f"{name}/loadingForceDisplacement.csv"
                             if self.reference_data.csv_path.is_file():
                                 if (
@@ -1657,9 +1650,13 @@ class CompressionSimulation:
                                     "WARNING: reference.csv not found — overlay will not appear."
                                 )
 
-                            with zf.open(filename, "w") as f:
-                                loading.to_csv(f)
-                            data["loadingForceDisplacement"] = filename
+                            if df is not None:
+                                disp0 = df["displacement"].iloc[0]
+                                split_idx = (df["displacement"] - disp0).abs().idxmax()
+                                loading = df[df["time"] <= df.loc[split_idx, "time"]]
+                                with zf.open(filename, "w") as f:
+                                    loading.to_csv(f)
+                                data["loadingForceDisplacement"] = filename
 
                     # Stress-strain
                     if self._contains_step(WorkflowStepType.STRESS_STRAIN):
@@ -1719,9 +1716,8 @@ class CompressionSimulation:
                     if unloading_energy is not None:
                         result["unloadingEnergy"] = round(unloading_energy, 4)
 
-    @staticmethod
-    def _results_have_energy_metrics(results: list) -> bool:
-        return any("volume" in r and "energyAbsorbed" in r for r in results)
+    def _results_have_energy_metrics(self, results: list) -> bool:
+        return self._contains_step(WorkflowStepType.ENERGY_METRICS)
 
     def _write_manifest_to_zip(self, zf: ZipFile, all_results: list):
         reference_result = {
@@ -1880,7 +1876,7 @@ class CompressionSimulation:
                                 "path": f"/material{i}/position",
                             }
 
-                # Force-displacement: ship whole and compute energy fields.
+                # Force-displacement: ship whole.
                 energy_absorbed_cumulative = None
                 loading_energy = None
                 unloading_energy = None
@@ -1896,31 +1892,16 @@ class CompressionSimulation:
                             "path": "/force_displacement",
                         }
 
-                        # Compute loading/unloading energies from the curve.
-                        with pd.HDFStore(fd_hdf, "r") as store:
-                            df = store["/force_displacement"].reset_index()
-                            if len(df):
-                                energy_absorbed_cumulative = df[
-                                    "energy_absorbed_cumulative"
-                                ].iloc[-1]
-                                split_time = df.loc[
-                                    df["displacement"].abs().idxmax(), "time"
-                                ]
-                                loading = df[df["time"] <= split_time]
-                                unloading = df[df["time"] > split_time]
-                                loading_energy = (
-                                    loading["energy_absorbed_cumulative"].iloc[-1]
-                                    if len(loading)
-                                    else 0.0
-                                )
-                                unloading_energy = (
-                                    max(
-                                        loading_energy - energy_absorbed_cumulative,
-                                        0.0,
-                                    )
-                                    if len(unloading)
-                                    else 0.0
-                                )
+                if self._contains_step(WorkflowStepType.ENERGY_METRICS):
+                    raw_ea = w.get_parameter("energy-metrics.energy_absorbed")
+                    raw_le = w.get_parameter("energy-metrics.loading_energy")
+                    raw_ue = w.get_parameter("energy-metrics.unloading_energy")
+                    if raw_ea is not None:
+                        energy_absorbed_cumulative = float(raw_ea)
+                    if raw_le is not None:
+                        loading_energy = float(raw_le)
+                    if raw_ue is not None:
+                        unloading_energy = float(raw_ue)
 
                 # Stress-strain: ship whole.
                 if self._contains_step(WorkflowStepType.STRESS_STRAIN):
@@ -1999,9 +1980,7 @@ class CompressionSimulation:
         assert self.out_dir is not None
         return self.out_dir / f"manifest.json"
 
-    def _build_server_data_for_workflow(self, workflow_id: str) -> dict[str, Any]:
-        workflow = self.client.workflows.get(workflow_id)
-        job_id_lookup = self._build_job_id_lookup(workflow)
+    def _build_server_data_for_workflow(self, workflow: Workflow, job_id_lookup: dict[str, str]) -> dict[str, Any]:
 
         server_data: dict[str, Any] = {}
 
@@ -2089,6 +2068,44 @@ class CompressionSimulation:
 
         return server_data
 
+    def _build_server_scalars_for_workflow(
+        self, workflow: Workflow, job_id_lookup: dict[str, str]
+    ) -> dict[str, Any]:
+        """Build top-level scalar fields for a server manifest result entry.
+        Volume is inlined (from prep workflow parameters); energy values are
+        refs that the server resolves from the energy-metrics job output."""
+        scalars: dict[str, Any] = {}
+
+        total_volume = 0.0
+        for part_info in self.part_infos:
+            if not self._is_analysis_target(part_info.part):
+                continue
+            if part_info.disabled:
+                continue
+            metrics_job = part_info.jobs.get("metrics", "")
+            if metrics_job:
+                raw = workflow.get_parameter(f"{metrics_job}.interior_volume")
+                if raw is not None:
+                    total_volume += float(raw)
+        scalars["volume"] = total_volume
+
+        if self._contains_step(WorkflowStepType.ENERGY_METRICS):
+            em_job_id = job_id_lookup.get("energy-metrics", "")
+            scalars["energyAbsorbed"] = {
+                "jobId": em_job_id,
+                "outputParam": "energy_absorbed",
+            }
+            scalars["loadingEnergy"] = {
+                "jobId": em_job_id,
+                "outputParam": "loading_energy",
+            }
+            scalars["unloadingEnergy"] = {
+                "jobId": em_job_id,
+                "outputParam": "unloading_energy",
+            }
+
+        return scalars
+
     def _write_server_manifest_for_pairs(
         self, pairs: list[tuple["CompressionSimulation", dict]]
     ) -> Optional[dict]:
@@ -2102,7 +2119,10 @@ class CompressionSimulation:
                 continue
             server_result = {k: v for k, v in result.items() if k != "data"}
             try:
-                server_result["data"] = sim._build_server_data_for_workflow(wf_id)
+                workflow = sim.client.workflows.get(wf_id)
+                job_id_lookup = sim._build_job_id_lookup(workflow)
+                server_result["data"] = sim._build_server_data_for_workflow(workflow, job_id_lookup)
+                server_result.update(sim._build_server_scalars_for_workflow(workflow, job_id_lookup))
             except Exception as e:
                 print(f"WARNING: couldn't build server data for {wf_id}: {e}")
                 server_result["data"] = {}

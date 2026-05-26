@@ -341,10 +341,6 @@ class CompressionExperiment:
 
         print(f"Experiment complete. Results written to: {zip_filename}")
 
-        # After download, the per-sim results have volume/energy populated.
-        # Re-upload server manifest with the filled-in values.
-        self.upload_server_manifest()
-
     @property
     def server_manifest_filename(self) -> Path:
         return self.base_simulation.server_manifest_filename

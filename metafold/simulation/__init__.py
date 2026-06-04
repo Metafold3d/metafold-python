@@ -26,3 +26,4 @@ from metafold.simulation.compression_experiment import (
     VaryMesh,
     VarySimulationParameter,
 )
+from metafold.simulation.run_experiment import run_experiment

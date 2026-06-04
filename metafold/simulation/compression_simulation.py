@@ -506,6 +506,42 @@ class CompressionSimulation:
                     p.restore_from_state_dict(saved)
                     break
 
+    @staticmethod
+    def find_or_create_project(
+        project_name: str,
+        access_token: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        auth_domain: str = "metafold3d.us.auth0.com",
+        base_url: str = "https://api.metafold3d.com/",
+    ) -> str:
+        """Find an existing project by name or create a new one.
+
+        Supply either access_token (server context — never reads from env) or
+        client_id + client_secret (local/programmable use, reads from env via
+        setup_client). base_url must match the audience the token was issued for.
+        Returns the project_id string.
+        """
+        client = MetafoldClient(
+            access_token=access_token,
+            client_id=client_id,
+            client_secret=client_secret,
+            auth_domain=auth_domain,
+            base_url=base_url,
+        )
+        try:
+            existing = client.projects.list(q=f"name:{project_name}")
+        except HTTPError:
+            existing = []
+        if existing:
+            return existing[0].id
+        created = client.projects.create(
+            project_name,
+            access=Access.PRIVATE,
+            type=ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT,
+        )
+        return created.id
+
     def setup_client(self, env_source, project_id) -> MetafoldClient:
         load_dotenv(env_source)
 
@@ -517,25 +553,13 @@ class CompressionSimulation:
         if not project_id and (self.project_name or self.create_project_if_needed):
             if self.project_name == "":
                 self.project_name = "experiment_" + str(uuid.uuid4())
-
-            # create the client without a project id
-            self.client = MetafoldClient(
+            self.project_id = CompressionSimulation.find_or_create_project(
+                self.project_name,
                 client_id=os.environ["METAFOLD_CLIENT_ID"],
                 client_secret=os.environ["METAFOLD_CLIENT_SECRET"],
-                auth_domain=os.environ["METAFOLD_AUTH_DOMAIN"],
-                base_url=os.environ["METAFOLD_BASE_URL"],
+                auth_domain=os.environ.get("METAFOLD_AUTH_DOMAIN", "metafold3d.us.auth0.com"),
+                base_url=os.environ.get("METAFOLD_BASE_URL", "https://api.metafold3d.com/"),
             )
-            projects_by_name = []
-            try:
-                projects_by_name = self.client.projects.list(q=f'name:{self.project_name}')
-            except HTTPError as e:
-                projects_by_name = []
-            if projects_by_name:
-                self.project_id = projects_by_name[0].id
-            elif self.create_project_if_needed:
-                created_project = self.client.projects.create(self.project_name, access=Access.PRIVATE, type=ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT)
-                if created_project:
-                    self.project_id = created_project.id
 
         if self.project_id:
             self.client = MetafoldClient(
@@ -2344,3 +2368,5 @@ class CompressionSimulation:
                     },
                 },
             ]
+
+

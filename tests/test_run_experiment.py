@@ -249,6 +249,21 @@ class TestBuildSimulationParameters:
         params = _build_simulation_parameters({"max_time": 0.02})
         assert params.output_int == default.output_int
 
+    def test_enum_field_coerced_from_string(self):
+        from metafold.simulation.compression_simulation import ForceSource
+        params = _build_simulation_parameters({"force_source": "rigid_reaction_force"})
+        assert params.force_source == ForceSource.RIGID_REACTION_FORCE
+
+    def test_invalid_enum_string_raises(self):
+        with pytest.raises(ValueError):
+            _build_simulation_parameters({"force_source": "vibes"})
+
+    def test_boundary_conditions_dict_passes_through(self):
+        # String values are normalized later by create_sim_config
+        params = _build_simulation_parameters(
+            {"boundary_conditions": {"z-": "symmetric"}})
+        assert params.boundary_conditions == {"z-": "symmetric"}
+
 
 class TestRunExperiment:
     """Integration-level tests: verify run_experiment wires up

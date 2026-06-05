@@ -1,4 +1,5 @@
 from metafold.simulation.compression_simulation import (
+    BoundaryCondition,
     CompressionSimulation,
     ExperimentBox,
     ExperimentCylinder,
@@ -14,6 +15,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentSupportCylinder,
     ExperimentSupportMesh,
     ExperimentSupportParallelepiped,
+    ForceSource,
     ReferenceData,
     SimulationParameters,
     WorkflowStep,

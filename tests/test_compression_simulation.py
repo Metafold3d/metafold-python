@@ -917,4 +917,3 @@ class TestSetupClient:
 
         assert sim.project_id == "fallback-pid"
         first_client.projects.create.assert_called_once()
-    

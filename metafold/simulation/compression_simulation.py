@@ -21,6 +21,7 @@ from simulation_configurator import (
     Contact,
     Mpm,
 )
+from simulation_configurator.element import CompositeElement, Element
 from simulation_configurator.grid import Face
 from simulation_configurator.shapes import Box, File, Cylinder, Parallelepiped
 from plyfile import PlyData, PlyElement
@@ -71,6 +72,68 @@ ZERO_VELOCITY = [
 ]
 
 
+class BoundaryCondition(Enum):
+    SYMMETRIC          = "symmetric"           # symmetry plane (acts as frictionless wall)
+    VELOCITY_DIRICHLET = "velocity_dirichlet"  # velocity fixed to zero at the face
+    VELOCITY_NEUMANN   = "velocity_neumann"    # zero velocity gradient (free face)
+
+
+DEFAULT_BOUNDARY_CONDITIONS = {
+    "x-": BoundaryCondition.SYMMETRIC,
+    "x+": BoundaryCondition.SYMMETRIC,
+    "y-": BoundaryCondition.SYMMETRIC,
+    "y+": BoundaryCondition.SYMMETRIC,
+    "z-": BoundaryCondition.VELOCITY_DIRICHLET,
+    "z+": BoundaryCondition.VELOCITY_DIRICHLET,
+}
+
+
+def _velocity_neumann_face(side: str):
+    # simulation_configurator.Face only provides fixed (symmetry) and unfixed
+    # (velocity Dirichlet) faces; build the Neumann variant here until it can
+    # move into a simulation-configurator release.
+    face = CompositeElement("Face", {"side": side})
+    bc_type = CompositeElement(
+        "BCType",
+        {"id": "all", "label": "Velocity", "var": "Neumann"},
+    )
+    bc_type.add(Element("value", data="[0.0, 0.0, 0.0]"))
+    face.add(bc_type)
+    return face
+
+
+_FACE_BUILDERS = {
+    BoundaryCondition.SYMMETRIC: Face.fixed,
+    BoundaryCondition.VELOCITY_DIRICHLET: Face.unfixed,
+    BoundaryCondition.VELOCITY_NEUMANN: _velocity_neumann_face,
+}
+
+
+def _normalize_boundary_conditions(
+    boundary_conditions: dict,
+) -> dict[str, BoundaryCondition]:
+    """Merge per-face boundary conditions over the defaults.
+
+    Values may be BoundaryCondition members or their string values (as parsed
+    from an experiment manifest). Faces not present keep their default.
+    """
+    unknown = set(boundary_conditions) - set(DEFAULT_BOUNDARY_CONDITIONS)
+    if unknown:
+        raise ValueError(
+            f"Unknown boundary condition face(s) {sorted(unknown)}; "
+            f"expected faces {sorted(DEFAULT_BOUNDARY_CONDITIONS)}"
+        )
+    resolved = dict(DEFAULT_BOUNDARY_CONDITIONS)
+    for side, bc in boundary_conditions.items():
+        resolved[side] = BoundaryCondition(bc) if isinstance(bc, str) else bc
+    return resolved
+
+
+class ForceSource(Enum):
+    BOUNDARY_FORCE       = "boundary_force"        # uses boundary_force_zminus (default)
+    RIGID_REACTION_FORCE = "rigid_reaction_force"  # uses rigid reaction force of force_source_part
+
+
 @dataclass
 class SimulationParameters:
     init_time: float = 0.0
@@ -88,6 +151,15 @@ class SimulationParameters:
     points_per_cell: int = 2
     extra_cells: list[int] = field(default_factory=lambda: [1, 1, 1])
     patches: list[int] = field(default_factory=lambda: [4, 2, 2])
+
+    # Per-face boundary conditions; faces omitted here use the default.
+    boundary_conditions: dict[str, BoundaryCondition] = field(
+        default_factory=lambda: dict(DEFAULT_BOUNDARY_CONDITIONS)
+    )
+    force_source: ForceSource = ForceSource.BOUNDARY_FORCE
+    # Part whose rigid_reaction_force feeds force-displacement when
+    # force_source is RIGID_REACTION_FORCE. Empty string means the piston.
+    force_source_part: str = ""
 
 
 @dataclass
@@ -807,10 +879,11 @@ class CompressionSimulation:
             }
         )
         bcs = BoundaryConditions()
-        for side in ["x-", "x+", "y-", "y+"]:
-            bcs._sub_elements[side] = Face.fixed(side)
-        for side in ["z-", "z+"]:
-            bcs._sub_elements[side] = Face.unfixed(side)
+        boundary_conditions = _normalize_boundary_conditions(
+            self.simulation_parameters.boundary_conditions
+        )
+        for side, bc in boundary_conditions.items():
+            bcs._sub_elements[side] = _FACE_BUILDERS[bc](side)
         grid.add(bcs)
 
         store = GeometryStore()
@@ -867,16 +940,18 @@ class CompressionSimulation:
             store.add(geometry_element)
 
         outputs_indices_key = ",".join(str(i) for i in range(len(self.part_infos)))
+        all_outputs = [
+            "boundary_force_zminus",
+            "boundary_force_zplus",
+            "kinetic_energy",
+            "strain_energy",
+        ]
+        if self.simulation_parameters.force_source == ForceSource.RIGID_REACTION_FORCE:
+            all_outputs.append("rigid_reaction_force")
         archive = Archive(
             outputs={
                 outputs_indices_key: ["deformation_measure", "position", "stress"],
-                "all": [
-                    "boundary_force_zminus",
-                    "boundary_force_zplus",
-                    "rigid_reaction_force_0",
-                    "kinetic_energy",
-                    "strain_energy",
-                ],
+                "all": all_outputs,
             },
             output_interval=self.simulation_parameters.output_int,
         )
@@ -1052,6 +1127,22 @@ class CompressionSimulation:
         )
         return piston_info
 
+    def _get_force_source_info(self):
+        """PartInfo of the body whose rigid_reaction_force is measured."""
+        name = self.simulation_parameters.force_source_part
+        if name:
+            info = self.get_part_info(name)
+            if info is None:
+                raise RuntimeError(f"Unknown force_source_part: {name}")
+            return info
+        piston_info = self._get_piston_info()
+        if piston_info is None:
+            raise RuntimeError(
+                "force_source RIGID_REACTION_FORCE requires a piston part "
+                "or an explicit force_source_part"
+            )
+        return piston_info
+
     def _add_to_workflow_von_mises_stress(self, part_infos: list[PartInfo]):
         self._add_to_workflow_postprocess(
             part_infos, "compress", "von-mises-stress", "cauchy_stress"
@@ -1065,9 +1156,12 @@ class CompressionSimulation:
     def _add_to_workflow_force_displacement(self, part_infos: list[PartInfo]):
         job_name_base = "force-displacement"
         self._add_to_workflow_postprocess(part_infos, "compress", job_name_base)
-        self.workflow_params[f"{job_name_base}.keys"] = json.dumps(
-            ["/boundary_force_zminus"]
-        )
+        if self.simulation_parameters.force_source == ForceSource.RIGID_REACTION_FORCE:
+            source = self._get_force_source_info()
+            keys = [f"/material{source.material_index}/rigid_reaction_force"]
+        else:
+            keys = ["/boundary_force_zminus"]
+        self.workflow_params[f"{job_name_base}.keys"] = json.dumps(keys)
         self.workflow_params[f"{job_name_base}.method"] = "BoundaryForce"
         # Find the piston part — there should be exactly one
         piston_info = self._get_piston_info()

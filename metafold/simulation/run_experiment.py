@@ -243,6 +243,7 @@ def run_experiment(
     output_path: str = "",
     access_token: Optional[str] = None,
     base_url: str = "https://api.metafold3d.com/",
+    credentials: Optional[dict] = None,
 ) -> str:
     """Create and run a compression experiment from a config dict.
 
@@ -250,11 +251,13 @@ def run_experiment(
     useful when the caller controls where results land (e.g. an API handler
     using a temp directory).
 
-    access_token, when provided, is passed directly to MetafoldClient,
-    bypassing any environment variable or dotenv loading. Use this when
-    calling from a server context where the caller's JWT is already available.
-    When omitted, CompressionSimulation loads credentials from the environment
-    as normal (local / programmable use).
+    Provide exactly one of:
+    - access_token: a bearer token (e.g. user JWT forwarded from the request).
+      base_url must also be set to match the token's audience.
+    - credentials: dict with keys client_id, client_secret, auth_domain, base_url.
+      Used for server-side service account auth — no env reads.
+    - neither: CompressionSimulation reads credentials from the environment via
+      dotenv (local / programmable use).
 
     Returns the Metafold project_id for the completed experiment.
     """
@@ -287,11 +290,18 @@ def run_experiment(
         sim_kwargs["workflow_steps"] = _build_workflow_steps(config["workflow_steps"])
 
     if access_token is not None:
-        # Build the client from the supplied token — no env reads.
         sim_kwargs["client"] = MetafoldClient(
             access_token=access_token,
             project_id=project_id or None,
             base_url=base_url,
+        )
+    elif credentials is not None:
+        sim_kwargs["client"] = MetafoldClient(
+            client_id=credentials["client_id"],
+            client_secret=credentials["client_secret"],
+            auth_domain=credentials.get("auth_domain", "metafold3d.us.auth0.com"),
+            base_url=credentials.get("base_url", "https://api.metafold3d.com/"),
+            project_id=project_id or None,
         )
 
     sim = CompressionSimulation(**sim_kwargs)
@@ -310,6 +320,7 @@ def run_experiment_from_zip(
     project_id: str = "",
     access_token: Optional[str] = None,
     base_url: str = "https://api.metafold3d.com/",
+    credentials: Optional[dict] = None,
 ) -> str:
     """Extract a zip containing experiment.json + mesh files and run the experiment.
 
@@ -341,4 +352,4 @@ def run_experiment_from_zip(
         if project_id:
             config["project_id"] = project_id
 
-        return run_experiment(config, output_path=output_path, access_token=access_token, base_url=base_url)
+        return run_experiment(config, output_path=output_path, access_token=access_token, base_url=base_url, credentials=credentials)

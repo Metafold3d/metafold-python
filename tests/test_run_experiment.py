@@ -414,6 +414,37 @@ class TestRunExperiment:
 
         assert captured["output_path"] == str(tmp_path / "actual")
 
+    def test_does_not_wait_for_results_by_default(self, ply_folder, tmp_path):
+        fake_sim = self._fake_sim(ply_folder)
+        with (
+            patch("metafold.simulation.run_experiment.CompressionSimulation", return_value=fake_sim),
+            patch("metafold.simulation.run_experiment.CompressionExperiment") as mock_exp_cls,
+        ):
+            run_experiment({
+                "project_name": "t",
+                "output_path": str(tmp_path / "out"),
+                "parts": [],
+            })
+
+        assert mock_exp_cls.call_args.kwargs["auto_download_results"] is False
+
+    def test_wait_for_results_downloads(self, ply_folder, tmp_path):
+        fake_sim = self._fake_sim(ply_folder)
+        with (
+            patch("metafold.simulation.run_experiment.CompressionSimulation", return_value=fake_sim),
+            patch("metafold.simulation.run_experiment.CompressionExperiment") as mock_exp_cls,
+        ):
+            run_experiment(
+                {
+                    "project_name": "t",
+                    "output_path": str(tmp_path / "out"),
+                    "parts": [],
+                },
+                wait_for_results=True,
+            )
+
+        assert mock_exp_cls.call_args.kwargs["auto_download_results"] is True
+
 
 class TestRunExperimentFromZip:
     def _make_zip(self, tmp_path, manifest: dict, mesh_files: list[str] = None) -> Path:

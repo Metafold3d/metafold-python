@@ -244,6 +244,7 @@ def run_experiment(
     access_token: Optional[str] = None,
     base_url: str = "https://api.metafold3d.com/",
     credentials: Optional[dict] = None,
+    wait_for_results: bool = False,
 ) -> str:
     """Create and run a compression experiment from a config dict.
 
@@ -259,7 +260,12 @@ def run_experiment(
     - neither: CompressionSimulation reads credentials from the environment via
       dotenv (local / programmable use).
 
-    Returns the Metafold project_id for the completed experiment.
+    By default this returns as soon as the simulation workflows have been
+    dispatched (after assets are uploaded and prep workflows finish); results
+    stay server-side. Pass wait_for_results=True to block until every
+    simulation finishes and download the results into output_path.
+
+    Returns the Metafold project_id for the experiment.
     """
     project_name = config.get("project_name", "")
     if not project_name:
@@ -309,6 +315,7 @@ def run_experiment(
     CompressionExperiment(
         simulation=sim,
         varying=varying,
+        auto_download_results=wait_for_results,
     )
 
     return sim.project_id
@@ -321,6 +328,7 @@ def run_experiment_from_zip(
     access_token: Optional[str] = None,
     base_url: str = "https://api.metafold3d.com/",
     credentials: Optional[dict] = None,
+    wait_for_results: bool = False,
 ) -> str:
     """Extract a zip containing experiment.json + mesh files and run the experiment.
 
@@ -334,7 +342,11 @@ def run_experiment_from_zip(
     access_token, when provided, is forwarded to run_experiment — see its
     docstring. When omitted, credentials are loaded from the environment.
 
-    Returns the Metafold project_id for the completed experiment.
+    By default this returns once the simulation workflows are dispatched;
+    pass wait_for_results=True to block until they finish and download the
+    results into output_path (see run_experiment).
+
+    Returns the Metafold project_id for the experiment.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         with ZipFile(zip_path) as zf:
@@ -352,4 +364,11 @@ def run_experiment_from_zip(
         if project_id:
             config["project_id"] = project_id
 
-        return run_experiment(config, output_path=output_path, access_token=access_token, base_url=base_url, credentials=credentials)
+        return run_experiment(
+            config,
+            output_path=output_path,
+            access_token=access_token,
+            base_url=base_url,
+            credentials=credentials,
+            wait_for_results=wait_for_results,
+        )

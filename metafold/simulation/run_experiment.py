@@ -289,9 +289,14 @@ def run_experiment(
         output_path=resolved_output_path,
         simulation_parameters=sim_params,
         project_id=project_id,
-        project_name=project_name,
         create_project_if_needed=not bool(project_id),
     )
+    # Only pass project_name when we have to create a project. When a
+    # project_id is supplied the project already exists, and passing the name
+    # would keep the find-or-create-by-name path alive — risking a duplicate
+    # project. simulation_name (set above) drives UPS/result naming regardless.
+    if not project_id:
+        sim_kwargs["project_name"] = project_name
     if "workflow_steps" in config:
         sim_kwargs["workflow_steps"] = _build_workflow_steps(config["workflow_steps"])
 

@@ -100,6 +100,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
 from zipfile import ZipFile
@@ -234,6 +235,13 @@ def _build_simulation_parameters(sim_config: dict) -> SimulationParameters:
         obj = params
         for part in parts[:-1]:
             obj = getattr(obj, part)
+        # Manifest values for enum fields (e.g. force_source) arrive as plain
+        # strings; coerce them to the field's enum type. Non-enum fields (e.g.
+        # the boundary_conditions dict) pass through and are normalized later
+        # in create_sim_config.
+        current = getattr(obj, parts[-1], None)
+        if isinstance(current, Enum) and isinstance(value, str):
+            value = type(current)(value)
         setattr(obj, parts[-1], value)
     return params
 

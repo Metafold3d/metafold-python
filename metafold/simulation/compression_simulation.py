@@ -847,17 +847,28 @@ class CompressionSimulation:
 
         grid_min = np.array(grid_patch["offset"], dtype=np.float32) * 1e-3
         grid_max = np.array(grid_patch["size"], dtype=np.float32) * 1e-3 + grid_min
-        grid_min[:2] -= self.simulation_parameters.margin_xy
-        grid_max[:2] += self.simulation_parameters.margin_xy
-        grid_max[2] += self.simulation_parameters.margin_z
 
-        # Expand grid to contain every rigid primitive's bounding box
+        # Expand grid to contain every part's bounding box, so nothing is
+        # clipped (e.g. a support/outsole extending below the representative
+        # part). Primitives report bounds via get_bounds() in metres, mesh
+        # parts via their sampled patch (offset/size in mm)
         for info in self.part_infos:
             part = info.part
             if isinstance(part, ExperimentPrimitive):
                 pmin, pmax = part.get_bounds()
-                grid_min = np.minimum(grid_min, pmin)
-                grid_max = np.maximum(grid_max, pmax)
+            elif info.patch:
+                pmin = np.array(info.patch["offset"], dtype=np.float32) / 1000.0
+                pmax = np.array(info.patch["size"], dtype=np.float32) / 1000.0 + pmin
+            else:
+                continue
+            grid_min = np.minimum(grid_min, pmin)
+            grid_max = np.maximum(grid_max, pmax)
+
+        # Apply margins after all parts included
+        grid_min[:2] -= self.simulation_parameters.margin_xy
+        grid_max[:2] += self.simulation_parameters.margin_xy
+        grid_min[2] -= self.simulation_parameters.margin_z
+        grid_max[2] += self.simulation_parameters.margin_z
 
         grid_size = grid_max - grid_min
         spacing = (

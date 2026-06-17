@@ -520,6 +520,35 @@ class TestRunExperimentFromZip:
         with pytest.raises(ValueError, match="experiment.json"):
             run_experiment_from_zip(zip_path, output_path=str(tmp_path / "out"))
 
+    def test_shear_simulation_params_from_manifest(self, tmp_path):
+        from metafold.simulation.compression_simulation import ForceSource
+
+        manifest = {
+            "project_name": "shear",
+            "parts": [{"type": "piston_cylinder"}],
+            "simulation": {
+                "force_source": "rigid_reaction_force",
+                "boundary_conditions": {"z-": "symmetric"},
+            },
+        }
+        zip_path = self._make_zip(tmp_path, manifest)
+        captured = {}
+        fake_sim = MagicMock(project_id="p", stl_folder=tmp_path)
+
+        def capture_sim(*args, **kwargs):
+            captured.update(kwargs)
+            return fake_sim
+
+        with (
+            patch("metafold.simulation.run_experiment.CompressionSimulation", side_effect=capture_sim),
+            patch("metafold.simulation.run_experiment.CompressionExperiment"),
+        ):
+            run_experiment_from_zip(zip_path, output_path=str(tmp_path / "out"))
+
+        params = captured["simulation_parameters"]
+        assert params.force_source == ForceSource.RIGID_REACTION_FORCE
+        assert params.boundary_conditions == {"z-": "symmetric"}
+
     def test_generator_and_created_fields_ignored(self, tmp_path):
         manifest = {
             "project_name": "grasshopper_export",

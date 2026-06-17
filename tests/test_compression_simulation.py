@@ -966,3 +966,68 @@ class TestSetupClient:
 
         assert sim.project_id == "fallback-pid"
         first_client.projects.create.assert_called_once()
+
+
+class TestFindOrCreateProjectCancel:
+    """find_or_create_project should cancel a reused project's in-flight
+    workflows when asked, since the new run overwrites those results."""
+
+    @pytest.fixture
+    def patched_client_class(self, monkeypatch):
+        from metafold.simulation import compression_simulation
+        fake_class = MagicMock()
+        monkeypatch.setattr(compression_simulation, "MetafoldClient", fake_class)
+        return fake_class
+
+    def _wf(self, wid, state):
+        w = MagicMock()
+        w.id = wid
+        w.state = state
+        return w
+
+    def test_cancels_active_workflows_on_existing_project(self, patched_client_class):
+        client = patched_client_class.return_value
+        existing = MagicMock()
+        existing.id = "pid-1"
+        client.projects.list.return_value = [existing]
+        # list(q="state:pending") -> [w1]; list(q="state:started") -> [w2]
+        client.workflows.list.side_effect = [
+            [self._wf("w1", "pending")],
+            [self._wf("w2", "started")],
+        ]
+
+        pid = CompressionSimulation.find_or_create_project(
+            "existing", access_token="tok", base_url="http://x/",
+            cancel_existing_workflows=True,
+        )
+
+        assert pid == "pid-1"
+        cancelled = {c.args[0] for c in client.workflows.cancel.call_args_list}
+        assert cancelled == {"w1", "w2"}
+
+    def test_no_cancel_when_flag_off(self, patched_client_class):
+        client = patched_client_class.return_value
+        existing = MagicMock()
+        existing.id = "pid-1"
+        client.projects.list.return_value = [existing]
+
+        CompressionSimulation.find_or_create_project(
+            "existing", access_token="tok", base_url="http://x/",
+        )
+
+        client.workflows.cancel.assert_not_called()
+
+    def test_no_cancel_when_creating_new_project(self, patched_client_class):
+        client = patched_client_class.return_value
+        client.projects.list.return_value = []  # nothing existing -> create
+        created = MagicMock()
+        created.id = "new-pid"
+        client.projects.create.return_value = created
+
+        pid = CompressionSimulation.find_or_create_project(
+            "fresh", access_token="tok", base_url="http://x/",
+            cancel_existing_workflows=True,
+        )
+
+        assert pid == "new-pid"
+        client.workflows.cancel.assert_not_called()

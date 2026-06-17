@@ -579,6 +579,21 @@ class CompressionSimulation:
                     break
 
     @staticmethod
+    def cancel_active_workflows(client: MetafoldClient, project_id: str) -> list[str]:
+        """Cancel all in-flight (pending/started) workflows for a project.
+
+        Returns the number of workflows cancelled. Used when re-running an
+        experiment on an existing project, whose previous results we're about
+        to overwrite anyway.
+        """
+        cancelled = []
+        for state in ("pending", "started"):
+            for wf in client.workflows.list(q=f"state:{state}", project_id=project_id):
+                client.workflows.cancel(wf.id, project_id=project_id)
+                cancelled.append(wf.id)
+        return cancelled
+
+    @staticmethod
     def find_or_create_project(
         project_name: str,
         access_token: Optional[str] = None,
@@ -586,12 +601,17 @@ class CompressionSimulation:
         client_secret: Optional[str] = None,
         auth_domain: str = "metafold3d.us.auth0.com",
         base_url: str = "https://api.metafold3d.com/",
+        cancel_existing_workflows: bool = True,
     ) -> str:
         """Find an existing project by name or create a new one.
 
         Supply either access_token (server context — never reads from env) or
         client_id + client_secret (local/programmable use, reads from env via
         setup_client). base_url must match the audience the token was issued for.
+
+        When cancel_existing_workflows is True and an existing project is
+        reused, its running workflows are cancelled first.
+
         Returns the project_id string.
         """
         client = MetafoldClient(
@@ -606,7 +626,10 @@ class CompressionSimulation:
         except HTTPError:
             existing = []
         if existing:
-            return existing[0].id
+            project_id = existing[0].id
+            if cancel_existing_workflows:
+                CompressionSimulation.cancel_active_workflows(client, project_id)
+            return project_id
         created = client.projects.create(
             project_name,
             access=Access.PRIVATE,

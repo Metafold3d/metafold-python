@@ -245,6 +245,55 @@ class TestBuildWorkflow:
         assert not any("force-displacement" in k for k in loaded["jobs"])
 
 
+class TestGridBounds:
+    """The grid must enclose every part, not just the representative one, so
+    nothing (e.g. an outsole below the midsole) gets clipped."""
+
+    def _grid_bounds(self, sim):
+        """Return (lower, upper) of the generated UPS grid box, in metres."""
+        root = sim.ups.getroot()
+        lower = json.loads(root.findtext(".//Grid//Box/lower"))
+        upper = json.loads(root.findtext(".//Grid//Box/upper"))
+        return lower, upper
+
+    def _prepare(self, sim, patches):
+        """Assign each part_info a patch (by unique name) and build the config."""
+        for info in sim.part_infos:
+            info.patch = patches[info.part_unique_name]
+            if hasattr(info.part, "filename"):
+                info.volume_filename = f"{info.part_unique_name}_volume.bin"
+        sim.create_sim_config()
+
+    def test_low_mesh_part_expands_grid_downward(self, sim):
+        # The regression: a mesh part (outsole) below the representative midsole
+        # must still expand the grid down. Before the fix, mesh parts were
+        # skipped and the outsole's bottom got clipped.
+        # Patch offsets/sizes are in mm; outsole bottom at -50 mm is below all
+        # other parts (incl. the piston cylinder, whose lowest point is +25 mm).
+        rep = {"size": [100.0, 100.0, 50.0], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
+        low = {"size": [100.0, 100.0, 20.0], "offset": [0.0, 0.0, -50.0], "resolution": [32, 32, 8]}
+        patches = {
+            "piston": rep, "upper_foam": rep, "midsole": rep, "outsole": low,
+        }
+        self._prepare(sim, patches)
+        lower, _ = self._grid_bounds(sim)
+        mz = sim.simulation_parameters.margin_z
+        # grid bottom (metres) = outsole bottom (-50 mm = -0.05 m) minus margin.
+        assert lower[2] == pytest.approx(-0.05 - mz, abs=1e-6)
+
+    def test_bottom_margin_clearance_added(self, sim):
+        # Bottom (z-) clearance was previously missing entirely. With all parts
+        # flush at z=0, the grid bottom must sit margin_z below the lowest part.
+        flat = {"size": [0.1, 0.1, 0.05], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
+        self._prepare(sim, {n: flat for n in
+                            ["piston", "upper_foam", "midsole", "outsole"]})
+        lower, _ = self._grid_bounds(sim)
+        mz = sim.simulation_parameters.margin_z
+        # Lowest part bottom is z=0 (piston cylinder sits higher), so the grid
+        # bottom is exactly -margin_z.
+        assert lower[2] == pytest.approx(-mz, abs=1e-6)
+
+
 class TestSampleAssets:
     def _make_success_workflow(self, job_names=()):
         """Return a mock workflow that is already in 'success' state."""
@@ -917,4 +966,68 @@ class TestSetupClient:
 
         assert sim.project_id == "fallback-pid"
         first_client.projects.create.assert_called_once()
-    
+
+
+class TestFindOrCreateProjectCancel:
+    """find_or_create_project should cancel a reused project's in-flight
+    workflows when asked, since the new run overwrites those results."""
+
+    @pytest.fixture
+    def patched_client_class(self, monkeypatch):
+        from metafold.simulation import compression_simulation
+        fake_class = MagicMock()
+        monkeypatch.setattr(compression_simulation, "MetafoldClient", fake_class)
+        return fake_class
+
+    def _wf(self, wid, state):
+        w = MagicMock()
+        w.id = wid
+        w.state = state
+        return w
+
+    def test_cancels_active_workflows_on_existing_project(self, patched_client_class):
+        client = patched_client_class.return_value
+        existing = MagicMock()
+        existing.id = "pid-1"
+        client.projects.list.return_value = [existing]
+        # list(q="state:pending") -> [w1]; list(q="state:started") -> [w2]
+        client.workflows.list.side_effect = [
+            [self._wf("w1", "pending")],
+            [self._wf("w2", "started")],
+        ]
+
+        pid = CompressionSimulation.find_or_create_project(
+            "existing", access_token="tok", base_url="http://x/",
+            cancel_existing_workflows=True,
+        )
+
+        assert pid == "pid-1"
+        cancelled = {c.args[0] for c in client.workflows.cancel.call_args_list}
+        assert cancelled == {"w1", "w2"}
+
+    def test_no_cancel_when_flag_off(self, patched_client_class):
+        client = patched_client_class.return_value
+        existing = MagicMock()
+        existing.id = "pid-1"
+        client.projects.list.return_value = [existing]
+
+        CompressionSimulation.find_or_create_project(
+            "existing", access_token="tok", base_url="http://x/",
+        )
+
+        client.workflows.cancel.assert_not_called()
+
+    def test_no_cancel_when_creating_new_project(self, patched_client_class):
+        client = patched_client_class.return_value
+        client.projects.list.return_value = []  # nothing existing -> create
+        created = MagicMock()
+        created.id = "new-pid"
+        client.projects.create.return_value = created
+
+        pid = CompressionSimulation.find_or_create_project(
+            "fresh", access_token="tok", base_url="http://x/",
+            cancel_existing_workflows=True,
+        )
+
+        assert pid == "new-pid"
+        client.workflows.cancel.assert_not_called()

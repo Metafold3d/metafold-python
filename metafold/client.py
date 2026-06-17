@@ -55,11 +55,16 @@ class Client:
             headers = {"Authorization": f"Bearer {self._auth.get_token()}"}
         r: Response = request(url, *args, **kwargs, headers=headers)
         if not r.ok:
-            body: dict[str, Any] = r.json()
-            # Error responses aren't entirely consistent in the Metafold API,
-            # for now we check for a handful of possible fields.
+            # Not all error responses are JSON so fall back to the status reason
+            try:
+                body: dict[str, Any] = r.json()
+            except ValueError:
+                body = {}
             reason = body.get("errors") or body.get("msg") or body.get("description")
-            raise HTTPError(f"HTTP error occurred: {reason or r.reason}")
+            raise HTTPError(
+                f"HTTP error occurred: {reason or r.reason} "
+                f"(status {r.status_code} for {r.request.method} {r.url})"
+            )
         return r
 
     def get(self, url: str, *args: Any, **kwargs: Any) ->  Response:

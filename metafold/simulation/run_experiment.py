@@ -56,7 +56,19 @@ JSON manifest format
 
     "simulation": {
         "max_time": 0.04,
-        "max_resolution": 512
+        "max_resolution": 512,
+
+        # Force source for force-displacement: "boundary_force" (default) or
+        # "rigid_reaction_force". When using rigid_reaction_force, optionally
+        # name the part it's measured on (defaults to the piston):
+        "force_source": "rigid_reaction_force",
+        "force_source_part": "puck",
+
+        # Per-face boundary conditions. Only the faces you list are overridden;
+        # the rest keep their defaults (x/y faces "symmetric", z faces
+        # "velocity_dirichlet"). Each value is one of: "symmetric",
+        # "velocity_dirichlet", "velocity_neumann".
+        "boundary_conditions": {"z-": "symmetric", "y+": "velocity_neumann"}
     },
 
     "workflow_steps": [

@@ -887,10 +887,10 @@ class CompressionSimulation:
             grid_min = np.minimum(grid_min, pmin)
             grid_max = np.maximum(grid_max, pmax)
 
-        # Apply margins after all parts included
+        # Apply margins after all parts are included. Note z- gets no margin
+        # since the bottom of the grid is the support boundary the stack sits on
         grid_min[:2] -= self.simulation_parameters.margin_xy
         grid_max[:2] += self.simulation_parameters.margin_xy
-        grid_min[2] -= self.simulation_parameters.margin_z
         grid_max[2] += self.simulation_parameters.margin_z
 
         grid_size = grid_max - grid_min

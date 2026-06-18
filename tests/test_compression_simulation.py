@@ -277,21 +277,23 @@ class TestGridBounds:
         }
         self._prepare(sim, patches)
         lower, _ = self._grid_bounds(sim)
-        mz = sim.simulation_parameters.margin_z
-        # grid bottom (metres) = outsole bottom (-50 mm = -0.05 m) minus margin.
-        assert lower[2] == pytest.approx(-0.05 - mz, abs=1e-6)
+        # grid bottom (metres) = outsole bottom (-50 mm = -0.05 m), flush — the
+        # z- face is the support boundary and gets NO margin.
+        assert lower[2] == pytest.approx(-0.05, abs=1e-6)
 
-    def test_bottom_margin_clearance_added(self, sim):
-        # Bottom (z-) clearance was previously missing entirely. With all parts
-        # flush at z=0, the grid bottom must sit margin_z below the lowest part.
-        flat = {"size": [0.1, 0.1, 0.05], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
+    def test_bottom_is_flush_no_margin(self, sim):
+        # The z- face is the support boundary the stack reacts against, so it
+        # must sit flush with the lowest part — adding margin there leaves the
+        # stack unsupported and it sags under the piston before compressing.
+        flat = {"size": [100.0, 100.0, 50.0], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
         self._prepare(sim, {n: flat for n in
                             ["piston", "upper_foam", "midsole", "outsole"]})
-        lower, _ = self._grid_bounds(sim)
+        lower, upper = self._grid_bounds(sim)
         mz = sim.simulation_parameters.margin_z
-        # Lowest part bottom is z=0 (piston cylinder sits higher), so the grid
-        # bottom is exactly -margin_z.
-        assert lower[2] == pytest.approx(-mz, abs=1e-6)
+        # Lowest part bottom is z=0 -> grid bottom is exactly 0 (no margin).
+        assert lower[2] == pytest.approx(0.0, abs=1e-6)
+        # Top (z+, above the piston) still gets clearance.
+        assert upper[2] > 0.05 + mz - 1e-6
 
 
 class TestSampleAssets:

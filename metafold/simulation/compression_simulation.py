@@ -589,8 +589,12 @@ class CompressionSimulation:
         cancelled = []
         for state in ("pending", "started"):
             for wf in client.workflows.list(q=f"state:{state}", project_id=project_id):
-                client.workflows.cancel(wf.id, project_id=project_id)
-                cancelled.append(wf.id)
+                try:
+                    client.workflows.cancel(wf.id, project_id=project_id)
+                    cancelled.append(wf.id)
+                except HTTPError:
+                    # Workflow already finished/uncancellable — ignore and move on.
+                    pass
         return cancelled
 
     @staticmethod

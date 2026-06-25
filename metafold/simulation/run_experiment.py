@@ -18,6 +18,8 @@ JSON manifest format
     "parts": [
         {
             "type": "piston_cylinder",
+            # optional geometry - omit to use default
+            "shape_parameters": {"top": [...], "bottom": [...], "radius": 0.02},
             "velocity": [           # optional — defaults to DEFAULT_PISTON_VELOCITY
                 [0.0,    0, 0,  0.0],
                 [0.002,  0, 0, -1.25],
@@ -26,6 +28,7 @@ JSON manifest format
                 [0.04,   0, 0,  0.0]
             ]
         },
+        {"type": "piston_box", "shape_parameters": {"min": [...], "max": [...]}},
         {"type": "piston_mesh", "file": "piston.ply", "velocity": [...]},
         {
             "type":           "mesh",
@@ -132,6 +135,7 @@ from metafold.simulation.compression_simulation import (
     CompressionSimulation,
     ExperimentMesh,
     ExperimentPart,
+    ExperimentPistonBox,
     ExperimentPistonCylinder,
     ExperimentPistonMesh,
     SimulationParameters,
@@ -171,7 +175,17 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
             kwargs = {}
             if "velocity" in entry:
                 kwargs["velocity"] = entry["velocity"]
+            if "shape_parameters" in entry:
+                kwargs["shape_parameters"] = entry["shape_parameters"]
             parts.append(ExperimentPistonCylinder(**kwargs))
+
+        elif part_type == "piston_box":
+            kwargs = {}
+            if "velocity" in entry:
+                kwargs["velocity"] = entry["velocity"]
+            if "shape_parameters" in entry:
+                kwargs["shape_parameters"] = entry["shape_parameters"]
+            parts.append(ExperimentPistonBox(**kwargs))
 
         elif part_type == "piston_mesh":
             kwargs = {"filename": entry["file"]}

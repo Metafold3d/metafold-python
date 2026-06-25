@@ -16,6 +16,7 @@ from metafold.materials import (
 )
 from metafold.simulation.compression_simulation import (
     ExperimentMesh,
+    ExperimentPistonBox,
     ExperimentPistonCylinder,
     ExperimentPistonMesh,
     SimulationParameters,
@@ -91,6 +92,17 @@ class TestBuildParts:
         from metafold.simulation.compression_simulation import DEFAULT_PISTON_VELOCITY
         parts = _build_parts([{"type": "piston_cylinder"}])
         assert parts[0].velocity == DEFAULT_PISTON_VELOCITY
+
+    def test_piston_cylinder_with_shape_parameters(self):
+        shape = {"top": [0, 0, 0.01], "bottom": [0, 0, 0.012], "radius": 0.015}
+        parts = _build_parts([{"type": "piston_cylinder", "shape_parameters": shape}])
+        assert parts[0].shape_parameters == shape
+
+    def test_piston_box(self):
+        shape = {"min": [0, 0, 0.01], "max": [0.02, 0.02, 0.012]}
+        parts = _build_parts([{"type": "piston_box", "shape_parameters": shape}])
+        assert isinstance(parts[0], ExperimentPistonBox)
+        assert parts[0].shape_parameters == shape
 
     def test_piston_mesh(self):
         parts = _build_parts([{"type": "piston_mesh", "file": "piston.ply"}])

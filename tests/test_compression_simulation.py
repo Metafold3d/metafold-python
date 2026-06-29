@@ -890,6 +890,7 @@ class TestSetupClient:
         # projects.list() finds an existing match.
         existing = MagicMock()
         existing.id = "existing-pid"
+        existing.name = "my_project"
         first_client = MagicMock()
         first_client.projects.list.return_value = [existing]
         patched_client_class.side_effect = [first_client, MagicMock()]
@@ -901,11 +902,33 @@ class TestSetupClient:
         )
 
         assert sim.project_id == "existing-pid"
-        first_client.projects.list.assert_called_once_with(q="name:my_project")
+        first_client.projects.list.assert_called_once_with(q='name:"my_project"')
         first_client.projects.create.assert_not_called()
         # MetafoldClient called twice — once without project_id, once with
         assert patched_client_class.call_count == 2
         assert patched_client_class.call_args_list[1].kwargs["project_id"] == "existing-pid"
+
+    def test_multiword_name_is_quoted_and_reused(
+        self, ply_folder, basic_parts, tmp_path, patched_client_class
+    ):
+        # Names with spaces must be quoted in the search query, otherwise the
+        # server's parser errors and a duplicate project gets created.
+        existing = MagicMock()
+        existing.id = "existing-pid"
+        existing.name = "grasshopper test 3"
+        first_client = MagicMock()
+        first_client.projects.list.return_value = [existing]
+        patched_client_class.side_effect = [first_client, MagicMock()]
+
+        sim = self._build_sim(
+            ply_folder, basic_parts, tmp_path,
+            project_name="grasshopper test 3",
+            create_project_if_needed=True,
+        )
+
+        assert sim.project_id == "existing-pid"
+        first_client.projects.list.assert_called_once_with(q='name:"grasshopper test 3"')
+        first_client.projects.create.assert_not_called()
 
     def test_new_project_created_when_name_not_found(
         self, ply_folder, basic_parts, tmp_path, patched_client_class
@@ -949,25 +972,24 @@ class TestSetupClient:
         assert first_client.projects.create.call_args.args[0].startswith("experiment_")
         assert sim.project_id == "auto-pid"
 
-    def test_http_error_during_list_falls_through_to_create(
+    def test_http_error_during_list_propagates_and_does_not_create(
         self, ply_folder, basic_parts, tmp_path, patched_client_class
     ):
+        # A failed search must NOT silently fall through to creating a project
+        # (that path produced duplicate projects). The error should surface.
         from requests import HTTPError
-        created = MagicMock()
-        created.id = "fallback-pid"
         first_client = MagicMock()
-        first_client.projects.list.side_effect = HTTPError("404")
-        first_client.projects.create.return_value = created
+        first_client.projects.list.side_effect = HTTPError("500")
         patched_client_class.side_effect = [first_client, MagicMock()]
 
-        sim = self._build_sim(
-            ply_folder, basic_parts, tmp_path,
-            project_name="xyz",
-            create_project_if_needed=True,
-        )
+        with pytest.raises(HTTPError):
+            self._build_sim(
+                ply_folder, basic_parts, tmp_path,
+                project_name="xyz",
+                create_project_if_needed=True,
+            )
 
-        assert sim.project_id == "fallback-pid"
-        first_client.projects.create.assert_called_once()
+        first_client.projects.create.assert_not_called()
 
 
 class TestFindOrCreateProjectCancel:
@@ -991,6 +1013,7 @@ class TestFindOrCreateProjectCancel:
         client = patched_client_class.return_value
         existing = MagicMock()
         existing.id = "pid-1"
+        existing.name = "existing"
         client.projects.list.return_value = [existing]
         # list(q="state:pending") -> [w1]; list(q="state:started") -> [w2]
         client.workflows.list.side_effect = [
@@ -1011,6 +1034,7 @@ class TestFindOrCreateProjectCancel:
         client = patched_client_class.return_value
         existing = MagicMock()
         existing.id = "pid-1"
+        existing.name = "existing"
         client.projects.list.return_value = [existing]
 
         CompressionSimulation.find_or_create_project(

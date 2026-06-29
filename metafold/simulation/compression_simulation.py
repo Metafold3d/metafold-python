@@ -625,10 +625,11 @@ class CompressionSimulation:
             auth_domain=auth_domain,
             base_url=base_url,
         )
-        try:
-            existing = client.projects.list(q=f"name:{project_name}")
-        except HTTPError:
-            existing = []
+        # Quote the project_name string for multi-word name searchess
+        existing = [
+            p for p in client.projects.list(q=f'name:"{project_name}"')
+            if p.name == project_name  # ensure full match
+        ]
         if existing:
             project_id = existing[0].id
             if cancel_existing_workflows:

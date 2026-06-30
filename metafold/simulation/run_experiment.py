@@ -29,7 +29,9 @@ JSON manifest format
             ]
         },
         {"type": "piston_box", "shape_parameters": {"min": [...], "max": [...]}},
-        {"type": "piston_mesh", "file": "piston.ply", "velocity": [...]},
+        # piston parts take an optional "material" (preset key or inline dict);
+        # omit to use DEFAULT_PISTON_MATERIAL
+        {"type": "piston_mesh", "file": "piston.ply", "velocity": [...], "material": "default_piston_material"},
         {
             "type":           "mesh",
             "name":           "midsole",
@@ -177,6 +179,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["velocity"] = entry["velocity"]
             if "shape_parameters" in entry:
                 kwargs["shape_parameters"] = entry["shape_parameters"]
+            if "material" in entry:
+                kwargs["material"] = _resolve_material(entry["material"])
             parts.append(ExperimentPistonCylinder(**kwargs))
 
         elif part_type == "piston_box":
@@ -185,12 +189,16 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["velocity"] = entry["velocity"]
             if "shape_parameters" in entry:
                 kwargs["shape_parameters"] = entry["shape_parameters"]
+            if "material" in entry:
+                kwargs["material"] = _resolve_material(entry["material"])
             parts.append(ExperimentPistonBox(**kwargs))
 
         elif part_type == "piston_mesh":
             kwargs = {"filename": entry["file"]}
             if "velocity" in entry:
                 kwargs["velocity"] = entry["velocity"]
+            if "material" in entry:
+                kwargs["material"] = _resolve_material(entry["material"])
             parts.append(ExperimentPistonMesh(**kwargs))
 
         else:

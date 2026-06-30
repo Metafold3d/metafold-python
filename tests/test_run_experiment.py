@@ -114,6 +114,39 @@ class TestBuildParts:
         parts = _build_parts([{"type": "piston_mesh", "file": "piston.ply", "velocity": velocity}])
         assert parts[0].velocity == velocity
 
+    def test_piston_mesh_default_material_when_omitted(self):
+        from metafold.materials import DEFAULT_PISTON_MATERIAL
+        parts = _build_parts([{"type": "piston_mesh", "file": "piston.ply"}])
+        assert parts[0].material is DEFAULT_PISTON_MATERIAL
+
+    def test_piston_mesh_with_preset_material(self):
+        parts = _build_parts([
+            {"type": "piston_mesh", "file": "piston.ply", "material": "material_aluminum"}
+        ])
+        assert parts[0].material is MATERIAL_ALUMINUM
+
+    def test_piston_mesh_with_inline_material(self):
+        parts = _build_parts([
+            {
+                "type": "piston_mesh",
+                "file": "piston.ply",
+                "material": {
+                    "density": 1730.0,
+                    "thermal_conductivity": 45,
+                    "specific_heat": 4.8e-4,
+                    "constitutive_model": {
+                        "type": "rigid",
+                        "params": {"shear_modulus": 2667.0e6, "bulk_modulus": 8000.0e6},
+                    },
+                },
+            }
+        ])
+        assert parts[0].material.constitutive_model.params.get_type() == "rigid"
+
+    def test_piston_cylinder_with_material(self):
+        parts = _build_parts([{"type": "piston_cylinder", "material": "material_aluminum"}])
+        assert parts[0].material is MATERIAL_ALUMINUM
+
     def test_mesh_part_with_preset_material(self):
         parts = _build_parts([
             {

@@ -1,4 +1,5 @@
 from io import BytesIO
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import pytest
@@ -13,6 +14,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentMesh,
     ExperimentPistonBase,
     ExperimentPistonCylinder,
+    SimulationParameters,
     WorkflowStep,
     WorkflowStepType,
 )
@@ -315,15 +317,15 @@ class TestSampleAssets:
         )
         assert s.prep_workflow_batch_size == 5
 
-    def test_fewer_parts_than_batch_size_runs_one_workflow(self, sim):
-        # 3 mesh parts, batch_size=10 → 1 workflow
+    def test_fewer_parts_than_batch_size_runs_one_workflow_per_pass(self, sim):
+        # 3 mesh parts, batch_size=10 → 1 batch × 2 passes (preprocess, sample)
         sim.client.workflows.run_async.return_value = self._make_success_workflow()
         sim.sample_assets()
-        assert sim.client.workflows.run_async.call_count == 1
-        assert len(sim.prep_workflows) == 1
+        assert sim.client.workflows.run_async.call_count == 2
+        assert len(sim.prep_workflows) == 2
 
     def test_parts_split_into_multiple_batches(self, ply_folder, basic_parts, tmp_path):
-        # 3 mesh parts, batch_size=2 → 2 workflows
+        # 3 mesh parts, batch_size=2 → 2 batches × 2 passes
         sim = CompressionSimulation(
             parts=basic_parts,
             simulation_name="t",
@@ -334,23 +336,48 @@ class TestSampleAssets:
         )
         sim.client.workflows.run_async.return_value = self._make_success_workflow()
         sim.sample_assets()
-        assert sim.client.workflows.run_async.call_count == 2
-        assert len(sim.prep_workflows) == 2
+        assert sim.client.workflows.run_async.call_count == 4
+        assert len(sim.prep_workflows) == 4
 
-    def test_all_workflows_launched_before_any_wait(self, sim):
-        # run_async should be called for all batches before workflows.get is polled
+    def test_all_workflows_launched_before_any_wait(
+        self, ply_folder, basic_parts, tmp_path, monkeypatch
+    ):
+        # Within a pass, run_async is called for every batch before
+        # workflows.get is polled (batches run in parallel).
+        monkeypatch.setattr(
+            "metafold.simulation.compression_simulation.sleep", lambda s: None
+        )
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            prep_workflow_batch_size=2,  # 2 batches per pass
+        )
         call_log = []
-        sim.client.workflows.run_async.side_effect = lambda *a, **kw: (
-            call_log.append("launch") or self._make_success_workflow()
-        )
-        sim.client.workflows.get.side_effect = lambda id: (
-            call_log.append("poll") or self._make_success_workflow()
-        )
+        pending_then_done = []
+
+        def launch(*a, **kw):
+            call_log.append("launch")
+            wf = MagicMock()
+            wf.state = "pending"
+            wf.jobs = []
+            wf.id = f"wf{len(call_log)}"
+            pending_then_done.append(wf)
+            return wf
+
+        def poll(id):
+            call_log.append("poll")
+            return self._make_success_workflow()
+
+        sim.client.workflows.run_async.side_effect = launch
+        sim.client.workflows.get.side_effect = poll
         sim.sample_assets()
-        # all launches happened before any polls
-        last_launch = max(i for i, e in enumerate(call_log) if e == "launch")
-        first_poll = next((i for i, e in enumerate(call_log) if e == "poll"), len(call_log))
-        assert last_launch < first_poll
+
+        # Pass 1: both batch launches happen before the first poll
+        first_poll = call_log.index("poll")
+        assert call_log[:first_poll].count("launch") == 2
 
     def test_failed_workflow_raises(self, sim):
         failed_wf = MagicMock()
@@ -367,6 +394,116 @@ class TestSampleAssets:
             if hasattr(info.part, "filename"):
                 assert "sample-mesh" in info.jobs
                 assert "preprocess-mesh" in info.jobs
+
+    def test_fallback_resamples_at_max_resolution_with_full_chain(self, sim):
+        # When pass-1 outputs are unavailable (no bounds, no preprocessed
+        # asset), pass 2 falls back to the legacy per-part chain at
+        # max_resolution.
+        sim.client.workflows.run_async.return_value = self._make_success_workflow()
+        sim.sample_assets()
+
+        max_res = int(sim.simulation_parameters.max_resolution)
+        for info in sim.part_infos:
+            if hasattr(info.part, "filename"):
+                assert info.sample_resolution == max_res
+
+        _, kwargs = sim.client.workflows.run_async.call_args_list[1]
+        assert kwargs["parameters"]["sample-mesh-midsole.resolution"] == str(max_res)
+        # Full chain rebuilt in the sampling workflow
+        yaml_arg = sim.client.workflows.run_async.call_args_list[1][0][0]
+        assert "mesh/preprocess" in yaml_arg
+
+
+class TestDensityMatchedSampling:
+    """Sampling resolutions are scaled per part so every mesh shares the
+    representative part's sample spacing (the piston-density regression)."""
+
+    def _make_job(self, name, longest_axis=None, asset_key=None, filename=None):
+        params = {}
+        if longest_axis is not None:
+            params["bounds"] = json.dumps(
+                {"min": [0.0, 0.0, 0.0], "max": [longest_axis, 50.0, 20.0]}
+            )
+        assets = {asset_key: SimpleNamespace(filename=filename)} if asset_key else {}
+        return SimpleNamespace(
+            name=name, outputs=SimpleNamespace(params=params, assets=assets), assets=[]
+        )
+
+    @pytest.fixture
+    def sampled_sim(self, ply_folder, basic_parts, tmp_path):
+        # max_resolution=31 and rep (midsole) longest axis 300 → spacing 10
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            simulation_parameters=SimulationParameters(max_resolution=31),
+        )
+
+        jobs = {
+            "p-up": self._make_job("preprocess-mesh-upper_foam", 150.0, "mesh", "pre_up.ply"),
+            "b-up": self._make_job("compute-bvh-upper_foam", None, "bvh", "bvh_up.bin"),
+            "p-mid": self._make_job("preprocess-mesh-midsole", 300.0, "mesh", "pre_mid.ply"),
+            "b-mid": self._make_job("compute-bvh-midsole", None, "bvh", "bvh_mid.bin"),
+            "p-out": self._make_job("preprocess-mesh-outsole", 600.0, "mesh", "pre_out.ply"),
+            "b-out": self._make_job("compute-bvh-outsole", None, "bvh", "bvh_out.bin"),
+        }
+        pass1_wf = SimpleNamespace(state="success", jobs=list(jobs), id="wf1")
+        pass2_wf = SimpleNamespace(state="success", jobs=[], id="wf2")
+        sim.client.workflows.run_async.side_effect = [pass1_wf, pass2_wf]
+        sim.client.jobs.get.side_effect = lambda job_id: jobs[job_id]
+
+        sim.sample_assets()
+        return sim
+
+    def test_spacing_anchored_to_representative(self, sampled_sim):
+        assert sampled_sim.sample_spacing == pytest.approx(10.0)
+
+    def test_representative_part_gets_max_resolution(self, sampled_sim):
+        assert sampled_sim.get_part_info("midsole").sample_resolution == 31
+
+    def test_smaller_part_gets_lower_resolution(self, sampled_sim):
+        # 150 mm at 10 mm spacing → 15 cells → 16 samples
+        assert sampled_sim.get_part_info("upper_foam").sample_resolution == 16
+
+    def test_larger_part_gets_higher_resolution(self, sampled_sim):
+        # 600 mm at 10 mm spacing → 60 cells → 61 samples (above max_resolution)
+        assert sampled_sim.get_part_info("outsole").sample_resolution == 61
+
+    def test_sampling_pass_binds_pass1_outputs(self, sampled_sim):
+        args, kwargs = sampled_sim.client.workflows.run_async.call_args_list[1]
+        assert kwargs["parameters"] == {
+            "sample-mesh-upper_foam.resolution": "16",
+            "sample-mesh-midsole.resolution": "31",
+            "sample-mesh-outsole.resolution": "61",
+        }
+        assert kwargs["assets"] == {
+            "sample-mesh-upper_foam.mesh": "pre_up.ply",
+            "sample-mesh-upper_foam.bvh": "bvh_up.bin",
+            "sample-mesh-midsole.mesh": "pre_mid.ply",
+            "sample-mesh-midsole.bvh": "bvh_mid.bin",
+            "sample-mesh-outsole.mesh": "pre_out.ply",
+            "sample-mesh-outsole.bvh": "bvh_out.bin",
+        }
+        # No preprocess re-run in the sampling pass
+        assert "mesh/preprocess" not in args[0]
+
+    def test_preprocess_pass_has_no_sampling(self, sampled_sim):
+        yaml_arg = sampled_sim.client.workflows.run_async.call_args_list[0][0][0]
+        assert "implicit/from-mesh" not in yaml_arg
+        assert "mesh/preprocess" in yaml_arg
+
+    def test_spacing_cached_for_later_variant_sampling(self, sampled_sim):
+        # Experiment variants sampled in a later call reuse the cached spacing
+        # even though the representative part isn't in that batch.
+        variant = CompressionSimulation.PartInfo(
+            ExperimentMesh("midsole_v1", None, "mid.ply")
+        )
+        variant.part_unique_name = "midsole_v1"
+        variant.bounds = {"min": [0.0, 0.0, 0.0], "max": [300.0, 50.0, 20.0]}
+        sampled_sim._assign_sample_resolutions([variant])
+        assert variant.sample_resolution == 31
 
 
 

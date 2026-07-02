@@ -345,6 +345,15 @@ class CompressionSimulation:
         # workflow. Downstream main-workflow jobs (metrics, compress) consume
         # this directly as an asset by filename.
         volume_filename: Optional[str] = None
+        # Mesh bounds ({"min": [...], "max": [...]}, mm) reported by the
+        # pass-1 preprocess job; used to density-match sampling resolutions.
+        bounds: Optional[dict] = None
+        # Output asset filenames from the pass-1 preprocess/BVH jobs, bound
+        # as inputs to the pass-2 sample job so nothing is recomputed.
+        preprocessed_filename: Optional[str] = None
+        bvh_filename: Optional[str] = None
+        # Sampling resolution (longest axis) assigned for the pass-2 sample job.
+        sample_resolution: Optional[int] = None
         patch: dict = field(default_factory=dict)
         jobs: dict[str, Any] = field(default_factory=lambda: {})
         part_unique_name = ""
@@ -407,6 +416,10 @@ class CompressionSimulation:
     prep_workflows: list[Workflow] = []
     prep_workflow_batch_size: int = 10
     write_ups: bool = True
+    # Sample spacing (mm) anchored to the representative part's longest axis:
+    # longest_axis / (max_resolution - 1). Cached so experiment variants
+    # sampled later match the base simulation's density.
+    sample_spacing: Optional[float] = None
 
     def __init__(
         self,
@@ -735,8 +748,10 @@ class CompressionSimulation:
                     asset = self.client.assets.create(str(info.file_path))
                 info.asset = asset
 
-    def _build_prep_workflow_for_batch(self, batch: list) -> tuple[str, dict, dict]:
-        """Build the YAML, params, and assets for one batch of part_infos."""
+    def _build_preprocess_workflow_for_batch(self, batch: list) -> tuple[str, dict, dict]:
+        """Build the pass-1 prep workflow: preprocess (+ BVH) per part. The
+        preprocess job outputs each mesh's exact bounds, used to density-match
+        the pass-2 sampling resolutions. No sampling happens in this pass."""
         jobs: dict = {}
         params: dict = {}
         assets: dict = {}
@@ -753,7 +768,6 @@ class CompressionSimulation:
             assets[f"{preprocess_job}.mesh"] = part_info.part.filename
             part_info.jobs["preprocess-mesh"] = preprocess_job
 
-            compute_bvh_job = ""
             if self._get_step(WorkflowStepType.COMPUTE_BVH, part_info.part.name):
                 compute_bvh_job = f"compute-bvh-{unique_name}"
                 jobs[compute_bvh_job] = {
@@ -763,24 +777,168 @@ class CompressionSimulation:
                 }
                 part_info.jobs["compute-bvh"] = compute_bvh_job
 
-            sample_mesh_job = f"sample-mesh-{unique_name}"
-            sample_mesh_def: dict = {
-                "type": "implicit/from-mesh",
-                "needs": [preprocess_job],
-                "assets": {"mesh": preprocess_job},
-            }
-            if compute_bvh_job:
-                sample_mesh_def["needs"].append(compute_bvh_job)
-                sample_mesh_def["assets"]["bvh"] = compute_bvh_job
-            jobs[sample_mesh_job] = sample_mesh_def
+        workflow_yaml = yaml.dump({"jobs": jobs}, default_flow_style=False)
+        return workflow_yaml, params, assets
 
-            params[f"{sample_mesh_job}.resolution"] = (
-                f"{self.simulation_parameters.max_resolution}"
+    def _build_sample_workflow_for_batch(self, batch: list) -> tuple[str, dict, dict]:
+        """Build the pass-2 sampling workflow: one implicit/from-mesh job per
+        part at its density-matched resolution, reusing the preprocessed mesh
+        and BVH assets produced in pass 1."""
+        jobs: dict = {}
+        params: dict = {}
+        assets: dict = {}
+
+        for part_info in batch:
+            if not hasattr(part_info.part, "filename"):
+                continue
+            if part_info.part.filename is None:
+                continue
+            unique_name = part_info.part_unique_name
+
+            sample_mesh_job = f"sample-mesh-{unique_name}"
+            if part_info.preprocessed_filename:
+                # Bind the pass-1 outputs directly; nothing is recomputed.
+                jobs[sample_mesh_job] = {"type": "implicit/from-mesh"}
+                assets[f"{sample_mesh_job}.mesh"] = part_info.preprocessed_filename
+                if part_info.bvh_filename:
+                    assets[f"{sample_mesh_job}.bvh"] = part_info.bvh_filename
+            else:
+                # Pass-1 outputs unavailable for this part: fall back to the
+                # full in-workflow chain (slightly wasteful, never wrong).
+                preprocess_job = f"preprocess-mesh-{unique_name}"
+                jobs[preprocess_job] = {"type": "mesh/preprocess"}
+                assets[f"{preprocess_job}.mesh"] = part_info.part.filename
+                part_info.jobs["preprocess-mesh"] = preprocess_job
+
+                sample_mesh_def: dict = {
+                    "type": "implicit/from-mesh",
+                    "needs": [preprocess_job],
+                    "assets": {"mesh": preprocess_job},
+                }
+                if self._get_step(WorkflowStepType.COMPUTE_BVH, part_info.part.name):
+                    compute_bvh_job = f"compute-bvh-{unique_name}"
+                    jobs[compute_bvh_job] = {
+                        "type": "mesh/compute-bvh",
+                        "needs": [preprocess_job],
+                        "assets": {"mesh": preprocess_job},
+                    }
+                    part_info.jobs["compute-bvh"] = compute_bvh_job
+                    sample_mesh_def["needs"].append(compute_bvh_job)
+                    sample_mesh_def["assets"]["bvh"] = compute_bvh_job
+                jobs[sample_mesh_job] = sample_mesh_def
+
+            resolution = part_info.sample_resolution or int(
+                self.simulation_parameters.max_resolution
             )
+            params[f"{sample_mesh_job}.resolution"] = f"{resolution}"
             part_info.jobs["sample-mesh"] = sample_mesh_job
 
         workflow_yaml = yaml.dump({"jobs": jobs}, default_flow_style=False)
         return workflow_yaml, params, assets
+
+    def _run_workflow_batches(self, batches: list, build_workflow_fn) -> list:
+        """Dispatch one workflow per batch (all in parallel), then wait for
+        every workflow to finish. Raises if any failed."""
+        workflows = []
+        for batch in batches:
+            workflow_yaml, params, assets = build_workflow_fn(batch)
+            wf = self.client.workflows.run_async(
+                workflow_yaml, parameters=params, assets=assets
+            )
+            workflows.append(wf)
+
+        for i, wf in enumerate(workflows):
+            while wf.state not in ["success", "failure", "canceled"]:
+                sleep(1)
+                wf = self.client.workflows.get(wf.id)
+            workflows[i] = wf
+
+        failed = [wf for wf in workflows if wf.state != "success"]
+        if failed:
+            raise RuntimeError(f"{len(failed)} prep workflow(s) failed")
+        return workflows
+
+    @staticmethod
+    def _job_output_asset_filename(job) -> Optional[str]:
+        """First output asset filename of a job, preferring the named outputs
+        mapping and falling back to the deprecated flat asset list."""
+        outputs = getattr(job, "outputs", None)
+        named = getattr(outputs, "assets", None) if outputs is not None else None
+        if isinstance(named, dict):
+            for asset in named.values():
+                filename = getattr(asset, "filename", None)
+                if filename:
+                    return filename
+        for asset in getattr(job, "assets", None) or []:
+            filename = getattr(asset, "filename", None)
+            if filename:
+                return filename
+        return None
+
+    def _collect_preprocess_outputs(self, part_infos: list, workflows: list):
+        """Read mesh bounds and output asset filenames from the pass-1
+        preprocess/BVH jobs onto each part_info."""
+        jobs_by_name = {
+            job.name: job
+            for wf in workflows
+            for job_id in wf.jobs
+            if (job := self.client.jobs.get(job_id)) is not None
+        }
+        for info in part_infos:
+            pre_job = jobs_by_name.get(info.jobs.get("preprocess-mesh", ""), None)
+            if pre_job is None:
+                continue
+
+            outputs = getattr(pre_job, "outputs", None)
+            out_params = getattr(outputs, "params", None) if outputs is not None else None
+            if isinstance(out_params, dict) and "bounds" in out_params:
+                bounds = out_params["bounds"]
+                info.bounds = json.loads(bounds) if isinstance(bounds, str) else bounds
+            info.preprocessed_filename = self._job_output_asset_filename(pre_job)
+
+            bvh_job = jobs_by_name.get(info.jobs.get("compute-bvh", ""), None)
+            if bvh_job is not None:
+                info.bvh_filename = self._job_output_asset_filename(bvh_job)
+
+    @staticmethod
+    def _bounds_longest_axis(bounds: dict) -> float:
+        mn = np.array(bounds["min"], dtype=np.float64)
+        mx = np.array(bounds["max"], dtype=np.float64)
+        return float(np.max(mx - mn))
+
+    def _assign_sample_resolutions(self, part_infos: list):
+        """Assign each part a sampling resolution so all parts share the
+        representative part's sample spacing. Parts smaller than the
+        representative get proportionally lower resolutions (and larger ones
+        higher), keeping particle density uniform across the simulation."""
+        max_resolution = max(2, int(self.simulation_parameters.max_resolution))
+
+        if self.sample_spacing is None:
+            # Prefer a representative-named info from the batch being sampled:
+            # experiments fork varied parts, so the base sim's own info may
+            # not carry the pass-1 bounds.
+            rep_info = next(
+                (
+                    i for i in part_infos
+                    if i.part.name == self.representative_part and i.bounds
+                ),
+                None,
+            ) or self.get_part_info(self.representative_part)
+            if rep_info is not None and rep_info.bounds:
+                self.sample_spacing = self._bounds_longest_axis(rep_info.bounds) / (
+                    max_resolution - 1
+                )
+
+        for info in part_infos:
+            if self.sample_spacing and info.bounds:
+                longest = self._bounds_longest_axis(info.bounds)
+                info.sample_resolution = max(
+                    2, int(round(longest / self.sample_spacing)) + 1
+                )
+            else:
+                # Legacy fallback: this part samples at max_resolution over
+                # its own bounds (density then depends on the part's size).
+                info.sample_resolution = max_resolution
 
     def sample_assets(self, part_infos=None):
         if part_infos is None:
@@ -793,25 +951,25 @@ class CompressionSimulation:
             for i in range(0, max(len(mesh_parts), 1), batch_size)
         ]
 
-        # Launch all batch workflows in parallel
-        self.prep_workflows = []
-        for i, batch in enumerate(batches):
-            workflow_yaml, params, assets = self._build_prep_workflow_for_batch(batch)
-            wf = self.client.workflows.run_async(
-                workflow_yaml, parameters=params, assets=assets
-            )
-            self.prep_workflows.append(wf)
+        # Pass 1: preprocess (+ BVH) every mesh. The preprocess job reports
+        # each mesh's exact bounds without sampling anything.
+        preprocess_workflows = self._run_workflow_batches(
+            batches, self._build_preprocess_workflow_for_batch
+        )
+        self._collect_preprocess_outputs(mesh_parts, preprocess_workflows)
 
-        # Wait for all to finish
-        for i, wf in enumerate(self.prep_workflows):
-            while wf.state not in ["success", "failure", "canceled"]:
-                sleep(1)
-                wf = self.client.workflows.get(wf.id)
-            self.prep_workflows[i] = wf
+        # Anchor sample spacing to the representative part so every part is
+        # sampled at the same spatial density (the grid is sized from the
+        # representative patch downstream).
+        self._assign_sample_resolutions(mesh_parts)
 
-        failed = [wf for wf in self.prep_workflows if wf.state != "success"]
-        if failed:
-            raise RuntimeError(f"{len(failed)} prep workflow(s) failed")
+        # Pass 2: sample each mesh at its density-matched resolution, reusing
+        # the preprocessed/BVH assets from pass 1.
+        sample_workflows = self._run_workflow_batches(
+            batches, self._build_sample_workflow_for_batch
+        )
+
+        self.prep_workflows = preprocess_workflows + sample_workflows
 
     def collect_sampled_volumes(self, part_infos=None):
         if part_infos is None:

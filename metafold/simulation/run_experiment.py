@@ -61,6 +61,9 @@ JSON manifest format
 
     "simulation": {
         "max_time": 0.04,
+        # Sampling resolution along the representative part's longest axis.
+        # Other parts sample at resolutions scaled to their size so every
+        # part shares the same spatial density.
         "max_resolution": 512,
 
         # Force source for force-displacement: "boundary_force" (default) or

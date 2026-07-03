@@ -735,7 +735,12 @@ class CompressionSimulation:
 
         for info in part_infos:
             if info.file_path and info.asset is None:
-                existing = self.client.assets.list(q=f"filename:{info.part.filename}")
+                # Quote the filename so the search parser keeps it as one term,
+                # and match it exactly (the search is a case-insensitive ILIKE).
+                existing = [
+                    a for a in self.client.assets.list(q=f'filename:"{info.part.filename}"')
+                    if a.filename == info.part.filename
+                ]
                 asset = None
                 if existing:
                     asset = existing[0]

@@ -246,6 +246,10 @@ class CompressionExperiment:
         self.base_simulation.populate_assets(self.experiment_part_infos)
         self._log("Sampling assets...")
         self.base_simulation.sample_assets(self.experiment_part_infos)
+        # Clones were deep-copied before sampling, so copy over the spacing that
+        # was anchored during sampling — each clone's grid must match it.
+        for local_sim in self.sims:
+            local_sim.sample_spacing = self.base_simulation.sample_spacing
         self._log("Collecting sampled volumes...")
         self.base_simulation.collect_sampled_volumes(self.experiment_part_infos)
         self._log("Prepare complete.")

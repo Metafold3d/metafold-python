@@ -31,7 +31,7 @@ def basic_parts():
     return [
         ExperimentPistonCylinder(),
         ExperimentMesh("upper_foam", DEFAULT_UPPER_FOAM, "top.ply"),
-        ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply", representative_part=True),
+        ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
         ExperimentMesh("outsole", DEFAULT_OUTSOLE, "out.ply"),
     ]
 
@@ -290,7 +290,7 @@ class TestShearUPS:
                 material=piston_mat,
                 velocity=self.SHEAR_VELOCITY,
             ),
-            ExperimentMesh("puck", puck_mat, "puck.stl", representative_part=True),
+            ExperimentMesh("puck", puck_mat, "puck.stl"),
         ]
 
         sim_params = SimulationParameters(

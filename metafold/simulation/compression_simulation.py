@@ -6,9 +6,9 @@ from typing import Any, Optional, Union
 from io import BytesIO
 import uuid
 
-from dotenv import load_dotenv
 from requests import HTTPError
 import yaml
+from dotenv import load_dotenv
 from metafold import MetafoldClient
 from pathlib import Path
 from numpy.typing import DTypeLike
@@ -171,7 +171,6 @@ class ExperimentPart:
 @dataclass
 class ExperimentMesh(ExperimentPart):
     filename: str = ""
-    representative_part: bool = False
 
 
 @dataclass
@@ -389,7 +388,6 @@ class CompressionSimulation:
     stl_folder: Optional[Path] = None
     out_dir: Optional[Path] = None
     results: list = []
-    representative_part: str = ""
     simulation_name: str = ""
     simulation_parameters: SimulationParameters
     piston_velocity: list[list[float]]
@@ -416,9 +414,9 @@ class CompressionSimulation:
     prep_workflows: list[Workflow] = []
     prep_workflow_batch_size: int = 10
     write_ups: bool = True
-    # Sample spacing (mm) anchored to the representative part's longest axis:
-    # longest_axis / (max_resolution - 1). Cached so experiment variants
-    # sampled later match the base simulation's density.
+    # Sample spacing (mm) anchored to the union ("total box") of every part's
+    # bounds: longest_axis(total_box) / (max_resolution - 1). Cached so
+    # experiment variants sampled later match the base simulation's density.
     sample_spacing: Optional[float] = None
 
     def __init__(
@@ -478,7 +476,6 @@ class CompressionSimulation:
             else:
                 self.part_infos.append(inner_part)
 
-        self.validate_parts()
         self.setup_ply_files(stl_folder_path)
         self.setup_results(output_path)
         if client is None:
@@ -538,16 +535,19 @@ class CompressionSimulation:
     def download_results(self):
         self.write_results()
 
-    def validate_parts(self):
-        for p in self.part_infos:
-            if hasattr(p.part, "representative_part") and p.part.representative_part:
-                if self.representative_part:
-                    raise ValueError(
-                        f"At most one part can have representative_part set to True"
-                    )
-                self.representative_part = p.part.name
-        if not self.representative_part:
-            raise ValueError(f"One part must have representative_part set to True")
+    def _get_primary_deformable_info(self):
+        """The specimen part for stress/strain and the featured histogram: the
+        first part that isn't a rigid piston/support (pistons are inserted at
+        index 0, so this is the first deformable body in the stack)."""
+        return next(
+            (
+                p for p in self.part_infos
+                if not isinstance(
+                    p.part, (ExperimentPistonBase, ExperimentSupportBase)
+                )
+            ),
+            None,
+        )
 
     def setup_results(self, output_path):
         self.out_dir = Path(output_path)
@@ -906,38 +906,65 @@ class CompressionSimulation:
         mx = np.array(bounds["max"], dtype=np.float64)
         return float(np.max(mx - mn))
 
-    def _assign_sample_resolutions(self, part_infos: list):
-        """Assign each part a sampling resolution so all parts share the
-        representative part's sample spacing. Parts smaller than the
-        representative get proportionally lower resolutions (and larger ones
-        higher), keeping particle density uniform across the simulation."""
-        max_resolution = max(2, int(self.simulation_parameters.max_resolution))
+    @staticmethod
+    def _part_bounds_mm(info):
+        """(min, max) axis-aligned bounds of a part in mm, or None. Mesh parts
+        report bounds via the pass-1 preprocess job (mm); primitives report
+        them analytically via get_bounds() (metres)."""
+        part = info.part
+        if isinstance(part, ExperimentPrimitive):
+            pmin, pmax = part.get_bounds()
+            return (
+                np.array(pmin, dtype=np.float64) * 1000.0,
+                np.array(pmax, dtype=np.float64) * 1000.0,
+            )
+        if info.bounds:
+            return (
+                np.array(info.bounds["min"], dtype=np.float64),
+                np.array(info.bounds["max"], dtype=np.float64),
+            )
+        return None
 
-        if self.sample_spacing is None:
-            # Prefer a representative-named info from the batch being sampled:
-            # experiments fork varied parts, so the base sim's own info may
-            # not carry the pass-1 bounds.
-            rep_info = next(
-                (
-                    i for i in part_infos
-                    if i.part.name == self.representative_part and i.bounds
-                ),
-                None,
-            ) or self.get_part_info(self.representative_part)
-            if rep_info is not None and rep_info.bounds:
-                self.sample_spacing = self._bounds_longest_axis(rep_info.bounds) / (
-                    max_resolution - 1
-                )
-
+    def _union_bounds_mm(self, part_infos: list):
+        """Union ("total box") of every part's bounds in mm, or None."""
+        mins, maxs = [], []
         for info in part_infos:
+            b = self._part_bounds_mm(info)
+            if b is not None:
+                mins.append(b[0])
+                maxs.append(b[1])
+        if not mins:
+            return None
+        return np.min(mins, axis=0), np.max(maxs, axis=0)
+
+    def _ensure_sample_spacing(self, part_infos: list):
+        """Set sample_spacing (mm) from the total box of all parts, if unset.
+        Anchoring to the union — not one 'representative' part — makes
+        max_resolution the resolution of the whole simulation's longest axis."""
+        if self.sample_spacing is not None:
+            return
+        max_resolution = max(2, int(self.simulation_parameters.max_resolution))
+        union = self._union_bounds_mm(part_infos)
+        if union is not None:
+            longest = float(np.max(union[1] - union[0]))
+            if longest > 0:
+                self.sample_spacing = longest / (max_resolution - 1)
+
+    def _assign_sample_resolutions(self, all_infos: list, mesh_infos: list):
+        """Anchor sample spacing to the total box (union of all part bounds),
+        then give each mesh a resolution scaled to its own size so every part
+        samples at the same spatial density."""
+        max_resolution = max(2, int(self.simulation_parameters.max_resolution))
+        self._ensure_sample_spacing(all_infos)
+
+        for info in mesh_infos:
             if self.sample_spacing and info.bounds:
                 longest = self._bounds_longest_axis(info.bounds)
                 info.sample_resolution = max(
                     2, int(round(longest / self.sample_spacing)) + 1
                 )
             else:
-                # Legacy fallback: this part samples at max_resolution over
-                # its own bounds (density then depends on the part's size).
+                # Fallback: sample at max_resolution over the part's own bounds.
                 info.sample_resolution = max_resolution
 
     def sample_assets(self, part_infos=None):
@@ -958,10 +985,9 @@ class CompressionSimulation:
         )
         self._collect_preprocess_outputs(mesh_parts, preprocess_workflows)
 
-        # Anchor sample spacing to the representative part so every part is
-        # sampled at the same spatial density (the grid is sized from the
-        # representative patch downstream).
-        self._assign_sample_resolutions(mesh_parts)
+        # Anchor sample spacing to the total box (union of all parts, primitives
+        # included) so every part samples at the same spatial density.
+        self._assign_sample_resolutions(part_infos, mesh_parts)
 
         # Pass 2: sample each mesh at its density-matched resolution, reusing
         # the preprocessed/BVH assets from pass 1.
@@ -1016,11 +1042,11 @@ class CompressionSimulation:
 
     def create_sim_config(self, name_suffix=""):
         """
-        grid_patch: the midsole patch, used as representative for grid sizing.
+        The grid spans the total box (union of every part's bounds) and is
+        sized by the shared sample spacing — no representative part.
         Piston velocity is [0,0,0] in the UPS — actual motion driven by velocity.txt.
         """
         name = self.simulation_name
-        grid_patch = self.get_part_info(self.representative_part).patch
 
         sim = Simulation(
             name,
@@ -1031,13 +1057,11 @@ class CompressionSimulation:
             timestep_multiplier=self.simulation_parameters.timestep_multiplier,
         )
 
-        grid_min = np.array(grid_patch["offset"], dtype=np.float32) * 1e-3
-        grid_max = np.array(grid_patch["size"], dtype=np.float32) * 1e-3 + grid_min
-
-        # Expand grid to contain every part's bounding box, so nothing is
-        # clipped (e.g. a support/outsole extending below the representative
-        # part). Primitives report bounds via get_bounds() in metres, mesh
-        # parts via their sampled patch (offset/size in mm)
+        # Total box: union of every part's bounding box so nothing is clipped.
+        # Primitives report bounds via get_bounds() in metres, mesh parts via
+        # their sampled patch (offset/size in mm).
+        grid_min = np.array([np.inf, np.inf, np.inf], dtype=np.float32)
+        grid_max = np.array([-np.inf, -np.inf, -np.inf], dtype=np.float32)
         for info in self.part_infos:
             part = info.part
             if isinstance(part, ExperimentPrimitive):
@@ -1057,11 +1081,10 @@ class CompressionSimulation:
         grid_max[2] += self.simulation_parameters.margin_z
 
         grid_size = grid_max - grid_min
-        spacing = (
-            np.array(grid_patch["size"], dtype=np.float32)
-            / (np.array(grid_patch["resolution"]) - 1)
-            * 1e-3
-        )
+        # Every part is sampled at this uniform (isotropic) spacing, so the grid
+        # cells match particle spacing. mm -> m.
+        self._ensure_sample_spacing(self.part_infos)
+        spacing = (self.sample_spacing or 1.0) * 1e-3
         grid_resolution = np.ceil(
             grid_size / (self.simulation_parameters.points_per_cell * spacing)
         ).astype(np.int32)
@@ -1371,20 +1394,36 @@ class CompressionSimulation:
             )
 
     def _add_to_workflow_stress_strain(self, part_infos: list[PartInfo]):
-        job_name_base = "stress-strain"
-        self._add_to_workflow_postprocess(
-            part_infos, "force-displacement", job_name_base
+        # One stress-strain job per deformable part, each normalizing the shared
+        # (global) force-displacement curve by that part's own cross-section
+        # (X*Y) and height (Z). Named stress-strain-<part> like metrics-<part>.
+        fd_job = next(
+            (p.jobs["force-displacement"] for p in part_infos
+             if "force-displacement" in p.jobs),
+            None,
         )
-        self.workflow_params[f"{job_name_base}.keys"] = json.dumps(
-            ["/force_displacement"]
-        )
-        representative_patch = self.get_part_info(self.representative_part).patch
-        self.workflow_params[f"{job_name_base}.compression_area"] = str(
-            representative_patch["size"][0] * representative_patch["size"][1]
-        )
-        self.workflow_params[f"{job_name_base}.initial_length"] = str(
-            representative_patch["size"][2]
-        )
+        if fd_job is None:
+            return
+        for part_info in part_infos:
+            if not self._is_analysis_target(part_info.part):
+                continue
+            if part_info.disabled or not part_info.patch:
+                continue
+            job_name = f"stress-strain-{part_info.part_unique_name}"
+            self.workflow_jobs[job_name] = {
+                "type": "sim/postprocess/stress-strain",
+                "needs": [fd_job],
+                "assets": {"data": fd_job},
+            }
+            self.workflow_params[f"{job_name}.keys"] = json.dumps(
+                ["/force_displacement"]
+            )
+            size = part_info.patch["size"]
+            self.workflow_params[f"{job_name}.compression_area"] = str(
+                size[0] * size[1]
+            )
+            self.workflow_params[f"{job_name}.initial_length"] = str(size[2])
+            part_info.jobs["stress-strain"] = job_name
 
     def _add_to_workflow_particle_displacement(self, part_infos: list[PartInfo]):
         self._add_to_workflow_postprocess(
@@ -1973,16 +2012,25 @@ class CompressionSimulation:
                                     loading.to_csv(f)
                                 data["loadingForceDisplacement"] = filename
 
-                    # Stress-strain
+                    # Stress-strain: one curve per deformable part.
                     if self._contains_step(WorkflowStepType.STRESS_STRAIN):
-                        ss_asset = w.get_asset("stress-strain.output")
-                        assert ss_asset
-                        self.client.assets.download_file(ss_asset.id, hdf_filename)
-                        with pd.HDFStore(hdf_filename) as store:
-                            filename = f"{name}/stressStrain.csv"
-                            with zf.open(filename, "w") as f:
-                                store["/stress_strain"].to_csv(f)
-                            data["stressStrain"] = filename
+                        for part_info in self.part_infos:
+                            if not self._is_analysis_target(part_info.part):
+                                continue
+                            if part_info.disabled:
+                                continue
+                            i = part_info.material_index
+                            ss_asset = w.get_asset(
+                                f"stress-strain-{part_info.part_unique_name}.output"
+                            )
+                            if ss_asset is None:
+                                continue
+                            self.client.assets.download_file(ss_asset.id, hdf_filename)
+                            with pd.HDFStore(hdf_filename) as store:
+                                filename = f"{name}/stressStrain{i}.csv"
+                                with zf.open(filename, "w") as f:
+                                    store["/stress_strain"].to_csv(f)
+                                data[f"stressStrain{i}"] = filename
 
                     # ----------------------------------------------------------
                     # Write PLY files from the combined all-material dataframe.
@@ -2218,18 +2266,26 @@ class CompressionSimulation:
                     if raw_ue is not None:
                         unloading_energy = float(raw_ue)
 
-                # Stress-strain: ship whole.
+                # Stress-strain: ship one whole file per deformable part.
                 if self._contains_step(WorkflowStepType.STRESS_STRAIN):
-                    ss_asset = w.get_asset("stress-strain.output")
-                    if ss_asset is not None:
-                        ss_hdf = tempdir_path / "stress_strain.h5"
-                        self.client.assets.download_file(ss_asset.id, ss_hdf)
-                        ss_zip_path = f"{name}/stress_strain.h5"
-                        zf.write(ss_hdf, arcname=ss_zip_path)
-                        data["stressStrain"] = {
-                            "name": ss_zip_path,
-                            "path": "/stress_strain",
-                        }
+                    for part_info in self.part_infos:
+                        if not self._is_analysis_target(part_info.part):
+                            continue
+                        if part_info.disabled:
+                            continue
+                        i = part_info.material_index
+                        ss_asset = w.get_asset(
+                            f"stress-strain-{part_info.part_unique_name}.output"
+                        )
+                        if ss_asset is not None:
+                            ss_hdf = tempdir_path / f"stress_strain_{i}.h5"
+                            self.client.assets.download_file(ss_asset.id, ss_hdf)
+                            ss_zip_path = f"{name}/stress_strain_{i}.h5"
+                            zf.write(ss_hdf, arcname=ss_zip_path)
+                            data[f"stressStrain{i}"] = {
+                                "name": ss_zip_path,
+                                "path": "/stress_strain",
+                            }
 
             # Sum interior volumes across analysis-target parts.
             total_volume = 0.0
@@ -2375,11 +2431,19 @@ class CompressionSimulation:
             }
 
         if self._contains_step(WorkflowStepType.STRESS_STRAIN):
-            server_data["stressStrain"] = {
-                "jobId": job_id_lookup.get("stress-strain", ""),
-                "assetName": "output",
-                "path": "/stress_strain",
-            }
+            for part_info in self.part_infos:
+                if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.disabled:
+                    continue
+                i = part_info.material_index
+                server_data[f"stressStrain{i}"] = {
+                    "jobId": job_id_lookup.get(
+                        f"stress-strain-{part_info.part_unique_name}", ""
+                    ),
+                    "assetName": "output",
+                    "path": "/stress_strain",
+                }
 
         return server_data
 
@@ -2605,8 +2669,9 @@ class CompressionSimulation:
             ]
 
         self.manifest["cardsConfig"]["B"] = []
-        if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
-            rep_idx = self.get_part_info(self.representative_part).material_index
+        specimen = self._get_primary_deformable_info()
+        if self._contains_step(WorkflowStepType.VON_MISES_STRESS) and specimen is not None:
+            rep_idx = specimen.material_index
             self.manifest["cardsConfig"]["B"].append(
                 {
                     "id": "vonMisesStress",
@@ -2619,6 +2684,30 @@ class CompressionSimulation:
                     },
                 }
             )
+
+        # One stress-strain card per deformable part (keyed stressStrain{i}).
+        if self._contains_step(WorkflowStepType.STRESS_STRAIN):
+            for part_info in self.part_infos:
+                if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.disabled:
+                    continue
+                i = part_info.material_index
+                self.manifest["cardsConfig"]["B"].append(
+                    {
+                        "id": f"stressStrain{i}",
+                        "title": f"{part_info.part_unique_name} Stress-Strain",
+                        "component": "MultiExperimentLineChart",
+                        "props": {
+                            "xColumn": "strain",
+                            "yColumn": "stress",
+                            "yMin": 0.0,
+                            "xAxisLabel": "Strain",
+                            "yAxisLabel": "Stress (MPa)",
+                            "dataSource": f"stressStrain{i}",
+                        },
+                    }
+                )
 
         if self._results_have_energy_metrics(results):
             self.manifest["resultsListConfig"].append(

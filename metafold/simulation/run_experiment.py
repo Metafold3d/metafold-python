@@ -36,8 +36,7 @@ JSON manifest format
             "type":           "mesh",
             "name":           "midsole",
             "material":       "default_midsole_nominal",
-            "file":           "mid.ply",
-            "representative": true
+            "file":           "mid.ply"
         }
     ],
 
@@ -61,9 +60,9 @@ JSON manifest format
 
     "simulation": {
         "max_time": 0.04,
-        # Sampling resolution along the representative part's longest axis.
-        # Other parts sample at resolutions scaled to their size so every
-        # part shares the same spatial density.
+        # Sampling resolution along the longest axis of the total box (the
+        # union of every part's bounds). Each part samples at a resolution
+        # scaled to its own size so every part shares the same spatial density.
         "max_resolution": 512,
 
         # Force source for force-displacement: "boundary_force" (default) or
@@ -217,7 +216,6 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                     name=entry["name"],
                     material=_resolve_material(entry["material"]),
                     filename=entry["file"],
-                    representative_part=entry.get("representative", False),
                 )
             )
     return parts

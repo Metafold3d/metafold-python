@@ -14,6 +14,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentMesh,
     ExperimentPistonBase,
     ExperimentPistonCylinder,
+    ExperimentPistonMesh,
     SimulationParameters,
     WorkflowStep,
     WorkflowStepType,
@@ -38,7 +39,7 @@ def basic_parts():
     return [
         ExperimentPistonCylinder(),
         ExperimentMesh("upper_foam", DEFAULT_UPPER_FOAM, "top.ply"),
-        ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply", representative_part=True),
+        ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
         ExperimentMesh("outsole", DEFAULT_OUTSOLE, "out.ply"),
     ]
 
@@ -83,7 +84,7 @@ class TestConstruction:
 
     def test_missing_ply_raises(self, ply_folder, tmp_path):
         parts = [
-            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "nonexistent.ply", representative_part=True),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "nonexistent.ply"),
         ]
         with pytest.raises(ValueError, match="not found"):
             CompressionSimulation(
@@ -93,36 +94,6 @@ class TestConstruction:
                 output_path=str(tmp_path / "out"),
                 client=MagicMock(),
             )
-
-class TestValidation:
-    def test_requires_representative_part(self, ply_folder, tmp_path):
-        parts = [
-            ExperimentPistonCylinder(),
-            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),  # no rep
-        ]
-        with pytest.raises(ValueError, match="representative_part"):
-            CompressionSimulation(
-                parts=parts,
-                simulation_name="t",
-                stl_folder_path=str(ply_folder),
-                output_path=str(tmp_path / "out"),
-                client=MagicMock(),
-            )
-
-    def test_only_one_representative_part_allowed(self, ply_folder, tmp_path):
-        parts = [
-            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply", representative_part=True),
-            ExperimentMesh("outsole", DEFAULT_OUTSOLE, "out.ply", representative_part=True),
-        ]
-        with pytest.raises(ValueError, match="At most one"):
-            CompressionSimulation(
-                parts=parts,
-                simulation_name="t",
-                stl_folder_path=str(ply_folder),
-                output_path=str(tmp_path / "out"),
-                client=MagicMock(),
-            )
-
 
 class TestWorkflowStepsInput:
     def test_accepts_workflow_step_instance(self):
@@ -248,8 +219,8 @@ class TestBuildWorkflow:
 
 
 class TestGridBounds:
-    """The grid must enclose every part, not just the representative one, so
-    nothing (e.g. an outsole below the midsole) gets clipped."""
+    """The grid (total box) must enclose every part, so nothing (e.g. an
+    outsole below the midsole) gets clipped."""
 
     def _grid_bounds(self, sim):
         """Return (lower, upper) of the generated UPS grid box, in metres."""
@@ -267,9 +238,9 @@ class TestGridBounds:
         sim.create_sim_config()
 
     def test_low_mesh_part_expands_grid_downward(self, sim):
-        # The regression: a mesh part (outsole) below the representative midsole
-        # must still expand the grid down. Before the fix, mesh parts were
-        # skipped and the outsole's bottom got clipped.
+        # The regression: a mesh part (outsole) below the midsole must still
+        # expand the grid down. Before the fix, mesh parts were skipped and the
+        # outsole's bottom got clipped.
         # Patch offsets/sizes are in mm; outsole bottom at -50 mm is below all
         # other parts (incl. the piston cylinder, whose lowest point is +25 mm).
         rep = {"size": [100.0, 100.0, 50.0], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
@@ -415,8 +386,9 @@ class TestSampleAssets:
 
 
 class TestDensityMatchedSampling:
-    """Sampling resolutions are scaled per part so every mesh shares the
-    representative part's sample spacing (the piston-density regression)."""
+    """Sampling resolutions scale per part so every mesh shares one sample
+    spacing anchored to the total box (union of all parts) — the piston-density
+    regression, now decoupled from any 'representative' part."""
 
     def _make_job(self, name, longest_axis=None, asset_key=None, filename=None):
         params = {}
@@ -430,19 +402,32 @@ class TestDensityMatchedSampling:
         )
 
     @pytest.fixture
-    def sampled_sim(self, ply_folder, basic_parts, tmp_path):
-        # max_resolution=31 and rep (midsole) longest axis 300 → spacing 10
+    def sampled_sim(self, tmp_path):
+        folder = tmp_path / "ply"
+        folder.mkdir()
+        for n in ["pist.ply", "top.ply", "mid.ply", "out.ply"]:
+            (folder / n).write_bytes(b"ply\n")
+
+        # Total box longest axis = 600 (outsole); max_resolution=31 → spacing 20.
+        parts = [
+            ExperimentPistonMesh(filename="pist.ply"),
+            ExperimentMesh("upper_foam", DEFAULT_UPPER_FOAM, "top.ply"),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+            ExperimentMesh("outsole", DEFAULT_OUTSOLE, "out.ply"),
+        ]
         sim = CompressionSimulation(
-            parts=basic_parts,
+            parts=parts,
             simulation_name="t",
-            stl_folder_path=str(ply_folder),
+            stl_folder_path=str(folder),
             output_path=str(tmp_path / "out"),
             client=MagicMock(),
             simulation_parameters=SimulationParameters(max_resolution=31),
         )
 
         jobs = {
-            "p-up": self._make_job("preprocess-mesh-upper_foam", 150.0, "mesh", "pre_up.ply"),
+            "p-pi": self._make_job("preprocess-mesh-piston", 100.0, "mesh", "pre_pi.ply"),
+            "b-pi": self._make_job("compute-bvh-piston", None, "bvh", "bvh_pi.bin"),
+            "p-up": self._make_job("preprocess-mesh-upper_foam", 160.0, "mesh", "pre_up.ply"),
             "b-up": self._make_job("compute-bvh-upper_foam", None, "bvh", "bvh_up.bin"),
             "p-mid": self._make_job("preprocess-mesh-midsole", 300.0, "mesh", "pre_mid.ply"),
             "b-mid": self._make_job("compute-bvh-midsole", None, "bvh", "bvh_mid.bin"),
@@ -457,28 +442,29 @@ class TestDensityMatchedSampling:
         sim.sample_assets()
         return sim
 
-    def test_spacing_anchored_to_representative(self, sampled_sim):
-        assert sampled_sim.sample_spacing == pytest.approx(10.0)
+    def test_spacing_anchored_to_total_box(self, sampled_sim):
+        # Union longest axis 600 / (31 - 1) = 20
+        assert sampled_sim.sample_spacing == pytest.approx(20.0)
 
-    def test_representative_part_gets_max_resolution(self, sampled_sim):
-        assert sampled_sim.get_part_info("midsole").sample_resolution == 31
+    def test_largest_part_gets_max_resolution(self, sampled_sim):
+        assert sampled_sim.get_part_info("outsole").sample_resolution == 31
 
-    def test_smaller_part_gets_lower_resolution(self, sampled_sim):
-        # 150 mm at 10 mm spacing → 15 cells → 16 samples
-        assert sampled_sim.get_part_info("upper_foam").sample_resolution == 16
-
-    def test_larger_part_gets_higher_resolution(self, sampled_sim):
-        # 600 mm at 10 mm spacing → 60 cells → 61 samples (above max_resolution)
-        assert sampled_sim.get_part_info("outsole").sample_resolution == 61
+    def test_parts_scale_to_shared_spacing(self, sampled_sim):
+        assert sampled_sim.get_part_info("piston").sample_resolution == 6      # 100/20
+        assert sampled_sim.get_part_info("upper_foam").sample_resolution == 9  # 160/20
+        assert sampled_sim.get_part_info("midsole").sample_resolution == 16    # 300/20
 
     def test_sampling_pass_binds_pass1_outputs(self, sampled_sim):
         args, kwargs = sampled_sim.client.workflows.run_async.call_args_list[1]
         assert kwargs["parameters"] == {
-            "sample-mesh-upper_foam.resolution": "16",
-            "sample-mesh-midsole.resolution": "31",
-            "sample-mesh-outsole.resolution": "61",
+            "sample-mesh-piston.resolution": "6",
+            "sample-mesh-upper_foam.resolution": "9",
+            "sample-mesh-midsole.resolution": "16",
+            "sample-mesh-outsole.resolution": "31",
         }
         assert kwargs["assets"] == {
+            "sample-mesh-piston.mesh": "pre_pi.ply",
+            "sample-mesh-piston.bvh": "bvh_pi.bin",
             "sample-mesh-upper_foam.mesh": "pre_up.ply",
             "sample-mesh-upper_foam.bvh": "bvh_up.bin",
             "sample-mesh-midsole.mesh": "pre_mid.ply",
@@ -495,15 +481,38 @@ class TestDensityMatchedSampling:
         assert "mesh/preprocess" in yaml_arg
 
     def test_spacing_cached_for_later_variant_sampling(self, sampled_sim):
-        # Experiment variants sampled in a later call reuse the cached spacing
-        # even though the representative part isn't in that batch.
+        # A variant sampled in a later call reuses the cached spacing.
         variant = CompressionSimulation.PartInfo(
             ExperimentMesh("midsole_v1", None, "mid.ply")
         )
         variant.part_unique_name = "midsole_v1"
         variant.bounds = {"min": [0.0, 0.0, 0.0], "max": [300.0, 50.0, 20.0]}
-        sampled_sim._assign_sample_resolutions([variant])
-        assert variant.sample_resolution == 31
+        sampled_sim._assign_sample_resolutions([variant], [variant])
+        assert variant.sample_resolution == 16  # 300 / 20 spacing
+
+    def test_union_bounds_includes_primitive(self, tmp_path):
+        # A primitive's analytic bounds (metres) contribute to the total box.
+        folder = tmp_path / "ply"
+        folder.mkdir()
+        (folder / "mid.ply").write_bytes(b"ply\n")
+        sim = CompressionSimulation(
+            parts=[
+                ExperimentPistonCylinder(),
+                ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+            ],
+            simulation_name="t",
+            stl_folder_path=str(folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        sim.get_part_info("midsole").bounds = {
+            "min": [0.0, 0.0, 0.0], "max": [10.0, 10.0, 10.0]
+        }
+        umin, umax = sim._union_bounds_mm(sim.part_infos)
+        pmin, pmax = sim._part_bounds_mm(sim.get_part_info("piston"))
+        # Union contains both the mesh box and the (mm-converted) primitive box
+        assert (umin <= pmin).all() and (umax >= pmax).all()
+        assert umin[0] <= 0.0 and umax[0] >= 10.0
 
 
 
@@ -556,7 +565,19 @@ jobs:
     - compress
     assets:
       data: compress
-  stress-strain:
+  stress-strain-upper_foam:
+    type: sim/postprocess/stress-strain
+    needs:
+    - force-displacement
+    assets:
+      data: force-displacement
+  stress-strain-midsole:
+    type: sim/postprocess/stress-strain
+    needs:
+    - force-displacement
+    assets:
+      data: force-displacement
+  stress-strain-outsole:
     type: sim/postprocess/stress-strain
     needs:
     - force-displacement
@@ -617,8 +638,12 @@ jobs:
         "metrics-upper_foam.volume_resolution": "[32, 32, 16]",
         "metrics-upper_foam.volume_size": "[0.1, 0.1, 0.05]",
         "particle-displacement.keys": "[\"/material0/position\", \"/material1/position\", \"/material2/position\", \"/material3/position\"]",
-        "stress-strain.initial_length": "0.05",
-        "stress-strain.keys": "[\"/force_displacement\"]",
+        "stress-strain-midsole.initial_length": "0.05",
+        "stress-strain-midsole.keys": "[\"/force_displacement\"]",
+        "stress-strain-outsole.initial_length": "0.05",
+        "stress-strain-outsole.keys": "[\"/force_displacement\"]",
+        "stress-strain-upper_foam.initial_length": "0.05",
+        "stress-strain-upper_foam.keys": "[\"/force_displacement\"]",
         "von-mises-stress.keys": "[\"/material0/cauchy_stress\", \"/material1/cauchy_stress\", \"/material2/cauchy_stress\", \"/material3/cauchy_stress\"]"
         }
         """)
@@ -626,6 +651,52 @@ jobs:
             assert key in workflow_params, f"missing key: {key}"
             assert workflow_params[key] == value, f"mismatch for {key}: {workflow_params[key]!r} != {value!r}"
 
+
+class TestStressStrainPerPart:
+    """stress-strain runs once per deformable part (not one representative)."""
+
+    def _built_sim(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        # Distinct X/Y so compression_area = X*Y is unambiguous.
+        fake_patch = {"size": [0.1, 0.2, 0.05], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
+        for info in sim.part_infos:
+            info.patch = fake_patch
+            if hasattr(info.part, "filename"):
+                info.volume_filename = f"{info.part_unique_name}_volume.bin"
+        sim.create_sim_config()
+        sim.build_workflow()
+        return sim
+
+    def test_one_job_per_deformable_part(self, ply_folder, basic_parts, tmp_path):
+        sim = self._built_sim(ply_folder, basic_parts, tmp_path)
+        for name in ("upper_foam", "midsole", "outsole"):
+            assert f"stress-strain-{name}" in sim.workflow_jobs
+
+    def test_no_single_or_rigid_job(self, ply_folder, basic_parts, tmp_path):
+        sim = self._built_sim(ply_folder, basic_parts, tmp_path)
+        assert "stress-strain" not in sim.workflow_jobs
+        assert "stress-strain-piston" not in sim.workflow_jobs
+
+    def test_each_job_reads_the_shared_force_displacement(self, ply_folder, basic_parts, tmp_path):
+        sim = self._built_sim(ply_folder, basic_parts, tmp_path)
+        for name in ("upper_foam", "midsole", "outsole"):
+            job = sim.workflow_jobs[f"stress-strain-{name}"]
+            assert job["type"] == "sim/postprocess/stress-strain"
+            assert job["needs"] == ["force-displacement"]
+            assert job["assets"] == {"data": "force-displacement"}
+
+    def test_params_normalized_by_own_patch(self, ply_folder, basic_parts, tmp_path):
+        sim = self._built_sim(ply_folder, basic_parts, tmp_path)
+        p = sim.workflow_params
+        assert p["stress-strain-midsole.compression_area"] == str(0.1 * 0.2)
+        assert p["stress-strain-midsole.initial_length"] == "0.05"
+        assert p["stress-strain-midsole.keys"] == json.dumps(["/force_displacement"])
 
 
 class TestMeshDataKey:
@@ -644,13 +715,18 @@ class TestMakeManifestV2:
 
     @pytest.fixture
     def sim_with_full_steps(self, ply_folder, basic_parts, tmp_path):
-        return CompressionSimulation(
+        sim = CompressionSimulation(
             parts=basic_parts,
             simulation_name="t",
             stl_folder_path=str(ply_folder),
             output_path=str(tmp_path / "out"),
             client=MagicMock(),
         )
+        # In the real flow create_sim_config() assigns material indices before
+        # make_manifest_v2() runs; mirror that so per-part cards key correctly.
+        for i, info in enumerate(sim.part_infos):
+            info.material_index = i
+        return sim
 
     def test_results_list_config_has_name_column_always(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2(results=[])
@@ -770,6 +846,42 @@ class TestMakeManifestV2:
         )
         sim.make_manifest_v2()
         assert sim.manifest["cardsConfig"]["A"] == []
+
+    def test_stress_strain_cards_one_per_deformable_part(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        ids = [c["id"] for c in sim_with_full_steps.manifest["cardsConfig"]["B"]]
+        assert "stressStrain1" in ids
+        assert "stressStrain2" in ids
+        assert "stressStrain3" in ids
+        # Piston (material_index 0) gets no stress-strain card.
+        assert "stressStrain0" not in ids
+
+    def test_stress_strain_card_props(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        cards = [
+            c
+            for c in sim_with_full_steps.manifest["cardsConfig"]["B"]
+            if c["id"].startswith("stressStrain")
+        ]
+        assert cards
+        for card in cards:
+            assert card["component"] == "MultiExperimentLineChart"
+            assert card["props"]["xColumn"] == "strain"
+            assert card["props"]["yColumn"] == "stress"
+            assert card["props"]["dataSource"] == card["id"]
+
+    def test_stress_strain_cards_absent_when_step_missing(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2()
+        ids = [c["id"] for c in sim.manifest["cardsConfig"]["B"]]
+        assert not any(i.startswith("stressStrain") for i in ids)
 
 
 class TestResultsHaveEnergyMetrics:

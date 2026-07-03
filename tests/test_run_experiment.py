@@ -153,7 +153,6 @@ class TestBuildParts:
                 "name": "midsole",
                 "material": "default_midsole_nominal",
                 "file": "mid.ply",
-                "representative": True,
             }
         ])
         p = parts[0]
@@ -161,19 +160,12 @@ class TestBuildParts:
         assert p.name == "midsole"
         assert p.material is DEFAULT_MIDSOLE_NOMINAL
         assert p.filename == "mid.ply"
-        assert p.representative_part is True
 
     def test_mesh_part_with_material_instance(self):
         parts = _build_parts([
             {"name": "outsole", "material": DEFAULT_OUTSOLE, "file": "out.ply"}
         ])
         assert parts[0].material is DEFAULT_OUTSOLE
-
-    def test_representative_defaults_to_false(self):
-        parts = _build_parts([
-            {"name": "upper_foam", "material": "default_upper_foam", "file": "top.ply"}
-        ])
-        assert parts[0].representative_part is False
 
     def test_missing_name_raises(self):
         with pytest.raises(ValueError, match="missing 'name'"):
@@ -191,7 +183,7 @@ class TestBuildParts:
         parts = _build_parts([
             {"type": "piston_cylinder"},
             {"name": "upper_foam", "material": "default_upper_foam", "file": "top.ply"},
-            {"name": "midsole", "material": "default_midsole_nominal", "file": "mid.ply", "representative": True},
+            {"name": "midsole", "material": "default_midsole_nominal", "file": "mid.ply"},
             {"name": "outsole", "material": "default_outsole", "file": "out.ply"},
         ])
         assert len(parts) == 4
@@ -339,7 +331,7 @@ class TestRunExperiment:
                 "ply_folder": str(ply_folder),
                 "parts": [
                     {"type": "piston_cylinder"},
-                    {"name": "midsole", "material": "default_midsole_nominal", "file": "mid.ply", "representative": True},
+                    {"name": "midsole", "material": "default_midsole_nominal", "file": "mid.ply"},
                 ],
             })
         assert result == "proj-abc"
@@ -604,7 +596,6 @@ class TestRunExperimentFromZip:
                 "name": "midsole",
                 "material": "default_midsole_nominal",
                 "file": "mid.ply",
-                "representative": True,
             }],
         }
         zip_path = self._make_zip(tmp_path, manifest, mesh_files=["mid.ply"])

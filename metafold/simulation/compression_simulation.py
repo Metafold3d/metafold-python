@@ -437,7 +437,7 @@ class CompressionSimulation:
             WorkflowStep(WorkflowStepType.VON_MISES_STRESS),
             WorkflowStep(WorkflowStepType.EFFECTIVE_STRAIN),
             WorkflowStep(WorkflowStepType.FORCE_DISPLACEMENT),
-            WorkflowStep(WorkflowStepType.STRESS_STRAIN),
+            # stress_strain is opt-in (not default): callers add it via workflow_steps.
             WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
             WorkflowStep(WorkflowStepType.ENERGY_METRICS),
         ],

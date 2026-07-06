@@ -535,20 +535,6 @@ class CompressionSimulation:
     def download_results(self):
         self.write_results()
 
-    def _get_primary_deformable_info(self):
-        """The specimen part for stress/strain and the featured histogram: the
-        first part that isn't a rigid piston/support (pistons are inserted at
-        index 0, so this is the first deformable body in the stack)."""
-        return next(
-            (
-                p for p in self.part_infos
-                if not isinstance(
-                    p.part, (ExperimentPistonBase, ExperimentSupportBase)
-                )
-            ),
-            None,
-        )
-
     def setup_results(self, output_path):
         self.out_dir = Path(output_path)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -2673,24 +2659,8 @@ class CompressionSimulation:
                 },
             ]
 
-        self.manifest["cardsConfig"]["B"] = []
-        specimen = self._get_primary_deformable_info()
-        if self._contains_step(WorkflowStepType.VON_MISES_STRESS) and specimen is not None:
-            rep_idx = specimen.material_index
-            self.manifest["cardsConfig"]["B"].append(
-                {
-                    "id": "vonMisesStress",
-                    "title": "von Mises Stress",
-                    "component": "SingleExperimentHistogram",
-                    "props": {
-                        "dataSource": f"vonMisesStressHistogram{rep_idx}",
-                        "xAxisLabel": "von Mises Stress",
-                        "yAxisLabel": "Frequency",
-                    },
-                }
-            )
-
-        # One stress-strain card per deformable part (keyed stressStrain{i}).
+        # One stress-strain card per deformable part (keyed stressStrain{i}),
+        # under force-displacement: same data, per-part normalizations.
         if self._contains_step(WorkflowStepType.STRESS_STRAIN):
             for part_info in self.part_infos:
                 if not self._is_analysis_target(part_info.part):
@@ -2698,7 +2668,7 @@ class CompressionSimulation:
                 if part_info.disabled:
                     continue
                 i = part_info.material_index
-                self.manifest["cardsConfig"]["B"].append(
+                self.manifest["cardsConfig"]["A"].append(
                     {
                         "id": f"stressStrain{i}",
                         "title": f"{part_info.part_unique_name} Stress-Strain",
@@ -2710,6 +2680,29 @@ class CompressionSimulation:
                             "xAxisLabel": "Strain",
                             "yAxisLabel": "Stress (MPa)",
                             "dataSource": f"stressStrain{i}",
+                        },
+                    }
+                )
+
+        # One von Mises histogram card per deformable part (keyed
+        # vonMisesStressHistogram{i}).
+        self.manifest["cardsConfig"]["B"] = []
+        if self._contains_step(WorkflowStepType.VON_MISES_STRESS):
+            for part_info in self.part_infos:
+                if not self._is_analysis_target(part_info.part):
+                    continue
+                if part_info.disabled:
+                    continue
+                i = part_info.material_index
+                self.manifest["cardsConfig"]["B"].append(
+                    {
+                        "id": f"vonMisesStress{i}",
+                        "title": f"{part_info.part_unique_name} von Mises Stress",
+                        "component": "SingleExperimentHistogram",
+                        "props": {
+                            "dataSource": f"vonMisesStressHistogram{i}",
+                            "xAxisLabel": "von Mises Stress",
+                            "yAxisLabel": "Frequency",
                         },
                     }
                 )
@@ -2739,7 +2732,7 @@ class CompressionSimulation:
                     "filtering": False,
                 }
             )
-            self.manifest["cardsConfig"]["C"] = [
+            self.manifest["cardsConfig"]["C"].append(
                 {
                     "id": "energyVolume",
                     "title": "Energy Absorbed-Interior Volume",
@@ -2751,7 +2744,7 @@ class CompressionSimulation:
                         "yAxisLabel": "Energy Absorbed (J)",
                         "colorScaleMeasurement": "energyAbsorbed",
                     },
-                },
-            ]
+                }
+            )
 
 

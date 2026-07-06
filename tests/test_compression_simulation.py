@@ -754,7 +754,6 @@ class TestMakeManifestV2:
     def test_card_c_present_when_energy_metrics_step_present(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2(results=[])
         card_c = sim_with_full_steps.manifest["cardsConfig"]["C"]
-        assert len(card_c) == 1
         assert card_c[0]["id"] == "energyVolume"
 
     def test_card_c_absent_when_no_energy_metrics(self, ply_folder, basic_parts, tmp_path):
@@ -847,12 +846,38 @@ class TestMakeManifestV2:
         sim.make_manifest_v2()
         assert sim.manifest["cardsConfig"]["A"] == []
 
-    def test_stress_strain_cards_one_per_deformable_part(self, sim_with_full_steps):
+    def test_von_mises_cards_one_per_deformable_part(self, sim_with_full_steps):
         sim_with_full_steps.make_manifest_v2()
-        ids = [c["id"] for c in sim_with_full_steps.manifest["cardsConfig"]["B"]]
-        assert "stressStrain1" in ids
-        assert "stressStrain2" in ids
-        assert "stressStrain3" in ids
+        cards = sim_with_full_steps.manifest["cardsConfig"]["B"]
+        ids = [c["id"] for c in cards]
+        assert ids == ["vonMisesStress1", "vonMisesStress2", "vonMisesStress3"]
+        for card in cards:
+            assert card["component"] == "SingleExperimentHistogram"
+            assert card["props"]["dataSource"] == card["id"].replace(
+                "vonMisesStress", "vonMisesStressHistogram"
+            )
+
+    def test_von_mises_cards_absent_when_step_missing(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+            workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
+        )
+        sim.make_manifest_v2()
+        assert sim.manifest["cardsConfig"]["B"] == []
+
+    def test_stress_strain_cards_in_pane_a_after_force_displacement(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2()
+        ids = [c["id"] for c in sim_with_full_steps.manifest["cardsConfig"]["A"]]
+        assert ids == [
+            "forceDisplacement",
+            "stressStrain1",
+            "stressStrain2",
+            "stressStrain3",
+        ]
         # Piston (material_index 0) gets no stress-strain card.
         assert "stressStrain0" not in ids
 
@@ -860,7 +885,7 @@ class TestMakeManifestV2:
         sim_with_full_steps.make_manifest_v2()
         cards = [
             c
-            for c in sim_with_full_steps.manifest["cardsConfig"]["B"]
+            for c in sim_with_full_steps.manifest["cardsConfig"]["A"]
             if c["id"].startswith("stressStrain")
         ]
         assert cards
@@ -880,8 +905,13 @@ class TestMakeManifestV2:
             workflow_steps=[WorkflowStep(WorkflowStepType.COMPRESS)],
         )
         sim.make_manifest_v2()
-        ids = [c["id"] for c in sim.manifest["cardsConfig"]["B"]]
+        ids = [c["id"] for c in sim.manifest["cardsConfig"]["A"]]
         assert not any(i.startswith("stressStrain") for i in ids)
+
+    def test_pane_c_is_energy_volume_only(self, sim_with_full_steps):
+        sim_with_full_steps.make_manifest_v2(results=[])
+        ids = [c["id"] for c in sim_with_full_steps.manifest["cardsConfig"]["C"]]
+        assert ids == ["energyVolume"]
 
 
 class TestResultsHaveEnergyMetrics:

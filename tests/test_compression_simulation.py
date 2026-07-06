@@ -565,24 +565,6 @@ jobs:
     - compress
     assets:
       data: compress
-  stress-strain-upper_foam:
-    type: sim/postprocess/stress-strain
-    needs:
-    - force-displacement
-    assets:
-      data: force-displacement
-  stress-strain-midsole:
-    type: sim/postprocess/stress-strain
-    needs:
-    - force-displacement
-    assets:
-      data: force-displacement
-  stress-strain-outsole:
-    type: sim/postprocess/stress-strain
-    needs:
-    - force-displacement
-    assets:
-      data: force-displacement
   particle-displacement:
     type: sim/postprocess/particle-displacement
     needs:
@@ -638,12 +620,6 @@ jobs:
         "metrics-upper_foam.volume_resolution": "[32, 32, 16]",
         "metrics-upper_foam.volume_size": "[0.1, 0.1, 0.05]",
         "particle-displacement.keys": "[\"/material0/position\", \"/material1/position\", \"/material2/position\", \"/material3/position\"]",
-        "stress-strain-midsole.initial_length": "0.05",
-        "stress-strain-midsole.keys": "[\"/force_displacement\"]",
-        "stress-strain-outsole.initial_length": "0.05",
-        "stress-strain-outsole.keys": "[\"/force_displacement\"]",
-        "stress-strain-upper_foam.initial_length": "0.05",
-        "stress-strain-upper_foam.keys": "[\"/force_displacement\"]",
         "von-mises-stress.keys": "[\"/material0/cauchy_stress\", \"/material1/cauchy_stress\", \"/material2/cauchy_stress\", \"/material3/cauchy_stress\"]"
         }
         """)
@@ -653,7 +629,8 @@ jobs:
 
 
 class TestStressStrainPerPart:
-    """stress-strain runs once per deformable part (not one representative)."""
+    """stress-strain runs once per deformable part (not one representative).
+    It is opt-in: callers must add the step to workflow_steps."""
 
     def _built_sim(self, ply_folder, basic_parts, tmp_path):
         sim = CompressionSimulation(
@@ -662,6 +639,12 @@ class TestStressStrainPerPart:
             stl_folder_path=str(ply_folder),
             output_path=str(tmp_path / "out"),
             client=MagicMock(),
+            # stress_strain is not default; opt in (needs compress + force-displacement).
+            workflow_steps=[
+                WorkflowStep(WorkflowStepType.COMPRESS),
+                WorkflowStep(WorkflowStepType.FORCE_DISPLACEMENT),
+                WorkflowStep(WorkflowStepType.STRESS_STRAIN),
+            ],
         )
         # Distinct X/Y so compression_area = X*Y is unambiguous.
         fake_patch = {"size": [0.1, 0.2, 0.05], "offset": [0.0, 0.0, 0.0], "resolution": [32, 32, 16]}
@@ -672,6 +655,16 @@ class TestStressStrainPerPart:
         sim.create_sim_config()
         sim.build_workflow()
         return sim
+
+    def test_not_run_by_default(self, ply_folder, basic_parts, tmp_path):
+        sim = CompressionSimulation(
+            parts=basic_parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        assert not sim._contains_step(WorkflowStepType.STRESS_STRAIN)
 
     def test_one_job_per_deformable_part(self, ply_folder, basic_parts, tmp_path):
         sim = self._built_sim(ply_folder, basic_parts, tmp_path)
@@ -721,6 +714,18 @@ class TestMakeManifestV2:
             stl_folder_path=str(ply_folder),
             output_path=str(tmp_path / "out"),
             client=MagicMock(),
+            # Every step, including opt-in stress_strain, so all cards render.
+            workflow_steps=[
+                WorkflowStep(WorkflowStepType.COMPUTE_BVH),
+                WorkflowStep(WorkflowStepType.METRICS),
+                WorkflowStep(WorkflowStepType.COMPRESS),
+                WorkflowStep(WorkflowStepType.VON_MISES_STRESS),
+                WorkflowStep(WorkflowStepType.EFFECTIVE_STRAIN),
+                WorkflowStep(WorkflowStepType.FORCE_DISPLACEMENT),
+                WorkflowStep(WorkflowStepType.STRESS_STRAIN),
+                WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
+                WorkflowStep(WorkflowStepType.ENERGY_METRICS),
+            ],
         )
         # In the real flow create_sim_config() assigns material indices before
         # make_manifest_v2() runs; mirror that so per-part cards key correctly.

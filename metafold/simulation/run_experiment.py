@@ -98,11 +98,14 @@ Available material presets
                 "material_pla", "material_stainless_steel",
                 "material_ti64", "material_tpu"
 
-Available workflow steps (default: all)
-----------------------------------------
+Available workflow steps (default: all except stress_strain)
+------------------------------------------------------------
     "compute_bvh", "metrics", "compress", "von_mises_stress",
-    "effective_strain", "force_displacement", "stress_strain",
+    "effective_strain", "force_displacement",
     "particle_displacement", "energy_metrics"
+
+    Opt-in (not run by default; add explicitly to workflow_steps):
+    "stress_strain"
 
 Zip format (for run_experiment_from_zip)
 -----------------------------------------

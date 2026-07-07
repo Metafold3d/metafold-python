@@ -8,7 +8,7 @@ import uuid
 
 from requests import HTTPError
 import yaml
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore
 from metafold import MetafoldClient
 from pathlib import Path
 from numpy.typing import DTypeLike
@@ -425,7 +425,7 @@ class CompressionSimulation:
         simulation_name: str,
         project_id: str = "",
         stl_folder_path: str = "PLY",
-        env_source: str = ".env.dev",
+        env_source: str | None = ".env.dev",
         output_path: str = "",
         client: Optional[MetafoldClient] = None,
         simulation_parameters: SimulationParameters = SimulationParameters(),
@@ -642,7 +642,8 @@ class CompressionSimulation:
         return created.id
 
     def setup_client(self, env_source, project_id) -> MetafoldClient:
-        load_dotenv(env_source)
+        if env_source is not None:
+            load_dotenv(env_source)
 
         if not project_id:
             self.project_id = os.environ.get("METAFOLD_PROJECT_ID", "")
@@ -2717,7 +2718,7 @@ class CompressionSimulation:
                     "heading": "Absorbed Energy (J)",
                     "filtering": False,
                 }
-            )    
+            )
             self.manifest["resultsListConfig"].append(
                             {
                     "key": "loadingEnergy",

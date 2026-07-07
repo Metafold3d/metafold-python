@@ -1130,6 +1130,7 @@ class TestSetupClient:
             simulation_name="t",
             stl_folder_path=str(ply_folder),
             output_path=str(tmp_path / "out"),
+            env_source=None,  # Ensure local .env files do not pollute test environment
             **kwargs,
         )
 

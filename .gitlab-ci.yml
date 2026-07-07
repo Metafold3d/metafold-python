@@ -3,7 +3,7 @@ stages:
 - test
 
 default:
-  image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+  image: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
   before_script:
   - uv sync --extra simulation
 

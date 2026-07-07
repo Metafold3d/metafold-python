@@ -33,7 +33,7 @@ metafold.jobs module
    :show-inheritance:
 
 metafold.workflows module
---------------------
+-------------------------
 
 .. automodule:: metafold.workflows
    :members:
@@ -44,14 +44,6 @@ metafold.client module
 
 .. automodule:: metafold.client
    :members:
-   :show-inheritance:
-
-metafold.func module
---------------------
-
-.. automodule:: metafold.func
-   :members:
-   :undoc-members:
    :show-inheritance:
 
 metafold.exceptions module

@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" data-content_root="./">
 <head>
@@ -8,14 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>API Reference &mdash; metafold  documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
   
-      <script src="_static/jquery.js?v=5d32c60e"></script>
-      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="_static/documentation_options.js?v=5929fcd5"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=5929fcd5"></script>
+        <script src="_static/doctools.js?v=9a2dae69"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -108,6 +110,11 @@
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.projects.Project.graph"><code class="docutils literal notranslate"><span class="pre">Project.graph</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.projects.ProjectType"><code class="docutils literal notranslate"><span class="pre">ProjectType</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.projects.ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT"><code class="docutils literal notranslate"><span class="pre">ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.projects.ProjectType.UNSPECIFIED"><code class="docutils literal notranslate"><span class="pre">ProjectType.UNSPECIFIED</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.projects.ProjectsEndpoint"><code class="docutils literal notranslate"><span class="pre">ProjectsEndpoint</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.projects.ProjectsEndpoint.create"><code class="docutils literal notranslate"><span class="pre">ProjectsEndpoint.create()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.projects.ProjectsEndpoint.delete"><code class="docutils literal notranslate"><span class="pre">ProjectsEndpoint.delete()</span></code></a></li>
@@ -134,6 +141,7 @@
 <li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.create"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.create()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.delete"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.delete()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.download"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.download()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.download_file"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.download_file()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.get"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.get()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.assets.AssetsEndpoint.list"><code class="docutils literal notranslate"><span class="pre">AssetsEndpoint.list()</span></code></a></li>
@@ -178,7 +186,7 @@
 </li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="metafold.html#metafold-workflows-module">metafold.workflows module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="metafold.html#module-metafold.workflows">metafold.workflows module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.workflows.Workflow"><code class="docutils literal notranslate"><span class="pre">Workflow</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.Workflow.id"><code class="docutils literal notranslate"><span class="pre">Workflow.id</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.Workflow.state"><code class="docutils literal notranslate"><span class="pre">Workflow.state</span></code></a></li>
@@ -197,6 +205,7 @@
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.WorkflowsEndpoint.get"><code class="docutils literal notranslate"><span class="pre">WorkflowsEndpoint.get()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.WorkflowsEndpoint.list"><code class="docutils literal notranslate"><span class="pre">WorkflowsEndpoint.list()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.WorkflowsEndpoint.run"><code class="docutils literal notranslate"><span class="pre">WorkflowsEndpoint.run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.workflows.WorkflowsEndpoint.run_async"><code class="docutils literal notranslate"><span class="pre">WorkflowsEndpoint.run_async()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -204,215 +213,6 @@
 <li class="toctree-l2"><a class="reference internal" href="metafold.html#module-metafold.client">metafold.client module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.client.Client"><code class="docutils literal notranslate"><span class="pre">Client</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.client.Client.poll"><code class="docutils literal notranslate"><span class="pre">Client.poll()</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="metafold.html#module-metafold.func">metafold.func module</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.BoxFramePrimitive"><code class="docutils literal notranslate"><span class="pre">BoxFramePrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.BoxPrimitive"><code class="docutils literal notranslate"><span class="pre">BoxPrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CSG"><code class="docutils literal notranslate"><span class="pre">CSG</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CSGIntersect"><code class="docutils literal notranslate"><span class="pre">CSGIntersect()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CSGSubtract"><code class="docutils literal notranslate"><span class="pre">CSGSubtract()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CSGUnion"><code class="docutils literal notranslate"><span class="pre">CSGUnion()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CSG_Parameters"><code class="docutils literal notranslate"><span class="pre">CSG_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.CSG_Parameters.operation"><code class="docutils literal notranslate"><span class="pre">CSG_Parameters.operation</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.CSG_Parameters.smoothing"><code class="docutils literal notranslate"><span class="pre">CSG_Parameters.smoothing</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CappedConePrimitive"><code class="docutils literal notranslate"><span class="pre">CappedConePrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CapsulePrimitive"><code class="docutils literal notranslate"><span class="pre">CapsulePrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.ComputeCurvatures"><code class="docutils literal notranslate"><span class="pre">ComputeCurvatures</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.ComputeCurvatures_Parameters"><code class="docutils literal notranslate"><span class="pre">ComputeCurvatures_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeCurvatures_Parameters.spacing_type"><code class="docutils literal notranslate"><span class="pre">ComputeCurvatures_Parameters.spacing_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeCurvatures_Parameters.step_size"><code class="docutils literal notranslate"><span class="pre">ComputeCurvatures_Parameters.step_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeCurvatures_Parameters.volume_size"><code class="docutils literal notranslate"><span class="pre">ComputeCurvatures_Parameters.volume_size</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.ComputeNormals"><code class="docutils literal notranslate"><span class="pre">ComputeNormals</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.ComputeNormals_Parameters"><code class="docutils literal notranslate"><span class="pre">ComputeNormals_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeNormals_Parameters.spacing_type"><code class="docutils literal notranslate"><span class="pre">ComputeNormals_Parameters.spacing_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeNormals_Parameters.step_size"><code class="docutils literal notranslate"><span class="pre">ComputeNormals_Parameters.step_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.ComputeNormals_Parameters.volume_size"><code class="docutils literal notranslate"><span class="pre">ComputeNormals_Parameters.volume_size</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.CylinderPrimitive"><code class="docutils literal notranslate"><span class="pre">CylinderPrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.EllipsoidPrimitive"><code class="docutils literal notranslate"><span class="pre">EllipsoidPrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints_Parameters"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints_Parameters.offset"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints_Parameters.offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints_Parameters.resolution"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints_Parameters.resolution</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints_Parameters.size"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints_Parameters.size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GenerateSamplePoints_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">GenerateSamplePoints_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize"><code class="docutils literal notranslate"><span class="pre">GradeCellSize</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.num_steps"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.num_steps</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.offset"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.shape_size"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.shape_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.shape_type"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.shape_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.shape_xform"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.shape_xform</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.step_size"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.step_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.width"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.width</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.GradeCellSize_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">GradeCellSize_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.InterpolateBoundaryCoords"><code class="docutils literal notranslate"><span class="pre">InterpolateBoundaryCoords</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.InterpolateBoundaryCoords_Parameters"><code class="docutils literal notranslate"><span class="pre">InterpolateBoundaryCoords_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.InterpolateBoundaryCoords_Parameters.tolerance"><code class="docutils literal notranslate"><span class="pre">InterpolateBoundaryCoords_Parameters.tolerance</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.InterpolateBoundaryCoords_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">InterpolateBoundaryCoords_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LinearFilter"><code class="docutils literal notranslate"><span class="pre">LinearFilter</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LinearFilter_Parameters"><code class="docutils literal notranslate"><span class="pre">LinearFilter_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.LinearFilter_Parameters.scale_a"><code class="docutils literal notranslate"><span class="pre">LinearFilter_Parameters.scale_a</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.LinearFilter_Parameters.scale_b"><code class="docutils literal notranslate"><span class="pre">LinearFilter_Parameters.scale_b</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LinkPrimitive"><code class="docutils literal notranslate"><span class="pre">LinkPrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LoadSamplePoints"><code class="docutils literal notranslate"><span class="pre">LoadSamplePoints</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LoadSamplePoints_Parameters"><code class="docutils literal notranslate"><span class="pre">LoadSamplePoints_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.LoadSamplePoints_Parameters.points"><code class="docutils literal notranslate"><span class="pre">LoadSamplePoints_Parameters.points</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LoadVolume"><code class="docutils literal notranslate"><span class="pre">LoadVolume</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.LoadVolume_Parameters"><code class="docutils literal notranslate"><span class="pre">LoadVolume_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.LoadVolume_Parameters.component_type"><code class="docutils literal notranslate"><span class="pre">LoadVolume_Parameters.component_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.LoadVolume_Parameters.resolution"><code class="docutils literal notranslate"><span class="pre">LoadVolume_Parameters.resolution</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters.box_width"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters.box_width</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters.scale"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters.scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters.shape_type"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters.shape_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters.shape_xform"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters.shape_xform</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.MapTexturePrimitive_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">MapTexturePrimitive_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.PlanePrimitive"><code class="docutils literal notranslate"><span class="pre">PlanePrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.PointSource"><code class="docutils literal notranslate"><span class="pre">PointSource()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Redistance"><code class="docutils literal notranslate"><span class="pre">Redistance</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Redistance_Parameters"><code class="docutils literal notranslate"><span class="pre">Redistance_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.Redistance_Parameters.post_offset"><code class="docutils literal notranslate"><span class="pre">Redistance_Parameters.post_offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.Redistance_Parameters.pre_offset"><code class="docutils literal notranslate"><span class="pre">Redistance_Parameters.pre_offset</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam"><code class="docutils literal notranslate"><span class="pre">SampleBeam</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.node_radius"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.node_radius</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.node_type"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.node_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.section_radius"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.section_radius</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.section_type"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.section_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.smoothing"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.smoothing</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBeam_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleBeam_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleBox"><code class="docutils literal notranslate"><span class="pre">SampleBox</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleBox_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleBox_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBox_Parameters.free_param"><code class="docutils literal notranslate"><span class="pre">SampleBox_Parameters.free_param</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBox_Parameters.shape_type"><code class="docutils literal notranslate"><span class="pre">SampleBox_Parameters.shape_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBox_Parameters.size"><code class="docutils literal notranslate"><span class="pre">SampleBox_Parameters.size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleBox_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleBox_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleCustomShape"><code class="docutils literal notranslate"><span class="pre">SampleCustomShape</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleCustomShape_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleCustomShape_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleCustomShape_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleCustomShape_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice"><code class="docutils literal notranslate"><span class="pre">SampleLattice</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.lattice_data"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.lattice_data</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.node_radius"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.node_radius</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.node_type"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.node_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.scale"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.scale_grading_range"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.scale_grading_range</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.scale_grading_scale"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.scale_grading_scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.section_radius"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.section_radius</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.section_radius_grading_range"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.section_radius_grading_range</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.section_radius_grading_scale"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.section_radius_grading_scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.section_type"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.section_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.smoothing"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.smoothing</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleLattice_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleLattice_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters.angles"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters.angles</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters.density"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters.density</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters.pore_size"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters.pore_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters.wave_count"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters.wave_count</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSpinodoid_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleSpinodoid_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.lattice_type"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.lattice_type</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.scale"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.scale_grading_range"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.scale_grading_range</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.scale_grading_scale"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.scale_grading_scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.threshold"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.threshold</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.threshold_grading_offset"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.threshold_grading_offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.threshold_grading_range"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.threshold_grading_range</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleSurfaceLattice_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleSurfaceLattice_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMesh"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMesh</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMeshBvh"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMeshBvh</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMeshBvh_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMeshBvh_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMeshBvh_Parameters.cw_winding"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMeshBvh_Parameters.cw_winding</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMeshBvh_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMeshBvh_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMesh_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMesh_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMesh_Parameters.cw_winding"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMesh_Parameters.cw_winding</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleTriangleMesh_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleTriangleMesh_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleVolume"><code class="docutils literal notranslate"><span class="pre">SampleVolume</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.SampleVolume_Parameters"><code class="docutils literal notranslate"><span class="pre">SampleVolume_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleVolume_Parameters.volume_offset"><code class="docutils literal notranslate"><span class="pre">SampleVolume_Parameters.volume_offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleVolume_Parameters.volume_size"><code class="docutils literal notranslate"><span class="pre">SampleVolume_Parameters.volume_size</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.SampleVolume_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">SampleVolume_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Shell"><code class="docutils literal notranslate"><span class="pre">Shell</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Shell_Parameters"><code class="docutils literal notranslate"><span class="pre">Shell_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.Shell_Parameters.offset"><code class="docutils literal notranslate"><span class="pre">Shell_Parameters.offset</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.Shell_Parameters.thickness"><code class="docutils literal notranslate"><span class="pre">Shell_Parameters.thickness</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Threshold"><code class="docutils literal notranslate"><span class="pre">Threshold</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.Threshold_Parameters"><code class="docutils literal notranslate"><span class="pre">Threshold_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.Threshold_Parameters.width"><code class="docutils literal notranslate"><span class="pre">Threshold_Parameters.width</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TorusPrimitive"><code class="docutils literal notranslate"><span class="pre">TorusPrimitive()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformCylindricalCoords"><code class="docutils literal notranslate"><span class="pre">TransformCylindricalCoords</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformCylindricalCoords_Parameters"><code class="docutils literal notranslate"><span class="pre">TransformCylindricalCoords_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformCylindricalCoords_Parameters.radial_scale"><code class="docutils literal notranslate"><span class="pre">TransformCylindricalCoords_Parameters.radial_scale</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformCylindricalCoords_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">TransformCylindricalCoords_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformMirrorCoords"><code class="docutils literal notranslate"><span class="pre">TransformMirrorCoords</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformMirrorCoords_Parameters"><code class="docutils literal notranslate"><span class="pre">TransformMirrorCoords_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformMirrorCoords_Parameters.mirror_normal"><code class="docutils literal notranslate"><span class="pre">TransformMirrorCoords_Parameters.mirror_normal</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformMirrorCoords_Parameters.mirror_point"><code class="docutils literal notranslate"><span class="pre">TransformMirrorCoords_Parameters.mirror_point</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformMirrorCoords_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">TransformMirrorCoords_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformSphericalCoords"><code class="docutils literal notranslate"><span class="pre">TransformSphericalCoords</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformSphericalCoords_Parameters"><code class="docutils literal notranslate"><span class="pre">TransformSphericalCoords_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformSphericalCoords_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">TransformSphericalCoords_Parameters.xform</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformTwistCoords"><code class="docutils literal notranslate"><span class="pre">TransformTwistCoords</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="metafold.html#metafold.func.TransformTwistCoords_Parameters"><code class="docutils literal notranslate"><span class="pre">TransformTwistCoords_Parameters</span></code></a><ul>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformTwistCoords_Parameters.axis"><code class="docutils literal notranslate"><span class="pre">TransformTwistCoords_Parameters.axis</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformTwistCoords_Parameters.frequency"><code class="docutils literal notranslate"><span class="pre">TransformTwistCoords_Parameters.frequency</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="metafold.html#metafold.func.TransformTwistCoords_Parameters.xform"><code class="docutils literal notranslate"><span class="pre">TransformTwistCoords_Parameters.xform</span></code></a></li>
 </ul>
 </li>
 </ul>

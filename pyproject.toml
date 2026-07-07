@@ -68,7 +68,7 @@ packages = ["metafold", "metafold.simulation"]
 environments = ["sys_platform == 'linux'"]
 
 [tool.uv.sources]
-simulation-configurator = { index = "sim-config-idx" }
+simulation-configurator = { index = "gitlab" }
 
 [[tool.mypy.overrides]]
 module = [
@@ -79,7 +79,7 @@ module = [
 ignore_missing_imports = true
 
 [[tool.uv.index]]
-name = "sim-config-idx"
+name = "gitlab"
 url = "https://gitlab.com/api/v4/projects/75460563/packages/pypi/simple"
 explicit = true
 authenticate = "always"

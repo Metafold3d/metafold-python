@@ -6,6 +6,9 @@ on: [push, pull_request]
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      UV_INDEX_GITLAB_USERNAME: ${{ vars.UV_INDEX_GITLAB_USERNAME }}
+      UV_INDEX_GITLAB_PASSWORD: ${{ secrets.UV_INDEX_GITLAB_PASSWORD }}
     strategy:
       fail-fast: false
       matrix:

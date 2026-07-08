@@ -353,6 +353,8 @@ class CompressionSimulation:
         bvh_filename: Optional[str] = None
         # Sampling resolution (longest axis) assigned for the pass-2 sample job.
         sample_resolution: Optional[int] = None
+        # From the prep metrics job; None until prep completes.
+        interior_volume: Optional[float] = None
         patch: dict = field(default_factory=dict)
         jobs: dict[str, Any] = field(default_factory=lambda: {})
         part_unique_name = ""
@@ -374,6 +376,7 @@ class CompressionSimulation:
                 "is_piston": isinstance(self.part, ExperimentPistonBase),
                 "part_name": self.part.name,
                 "disabled": self.disabled,
+                "interior_volume": self.interior_volume,
             }
 
         def restore_from_state_dict(self, saved: dict):
@@ -382,6 +385,7 @@ class CompressionSimulation:
             self.material_name = saved["material_name"]
             self.jobs = saved["jobs"]
             self.disabled = saved.get("disabled", False)
+            self.interior_volume = saved.get("interior_volume")
 
     client: MetafoldClient
     project_id: str = ""
@@ -825,6 +829,24 @@ class CompressionSimulation:
             params[f"{sample_mesh_job}.resolution"] = f"{resolution}"
             part_info.jobs["sample-mesh"] = sample_mesh_job
 
+            # Metrics run in prep (not the main workflow) so interior volume
+            # is known before dispatch, when the server manifest is uploaded.
+            if self._is_analysis_target(part_info.part) and self._get_step(
+                WorkflowStepType.METRICS, part_info.part.name
+            ):
+                metrics_job = f"metrics-{unique_name}"
+                jobs[metrics_job] = {
+                    "type": "implicit/metrics",
+                    "needs": [sample_mesh_job],
+                    "assets": {"volume": sample_mesh_job},
+                    "parameters": {
+                        "volume_size": {"job": sample_mesh_job, "parameter": "patch_size"},
+                        "volume_offset": {"job": sample_mesh_job, "parameter": "patch_offset"},
+                        "volume_resolution": {"job": sample_mesh_job, "parameter": "patch_resolution"},
+                    },
+                }
+                part_info.jobs["metrics"] = metrics_job
+
         workflow_yaml = yaml.dump({"jobs": jobs}, default_flow_style=False)
         return workflow_yaml, params, assets
 
@@ -1026,6 +1048,30 @@ class CompressionSimulation:
             if volume_asset is not None:
                 info.volume_filename = volume_asset.filename
 
+            metrics_job = prep_workflow_jobs.get(info.jobs.get("metrics", ""))
+            if metrics_job is not None:
+                raw = metrics_job.outputs.params.get("interior_volume")
+                if raw is not None:
+                    info.interior_volume = float(raw)
+
+    def _total_interior_volume(self, workflow: Optional[Workflow] = None) -> float:
+        """Sum interior volumes across analysis-target parts. Falls back to
+        the main-workflow metrics readback for experiments dispatched before
+        metrics moved to the prep workflow."""
+        total = 0.0
+        for part_info in self.part_infos:
+            if not self._is_analysis_target(part_info.part) or part_info.disabled:
+                continue
+            if part_info.interior_volume is not None:
+                total += part_info.interior_volume
+                continue
+            metrics_job = part_info.jobs.get("metrics", "")
+            if workflow is not None and metrics_job:
+                raw = workflow.get_parameter(f"{metrics_job}.interior_volume")
+                if raw is not None:
+                    total += float(raw)
+        return total
+
     def get_part_info(self, name):
         for info in self.part_infos:
             if info.part.name == name:
@@ -1219,6 +1265,9 @@ class CompressionSimulation:
         ElementTree.indent(self.ups)
 
     def _add_to_workflow_metrics(self, part_infos: list[PartInfo]):
+        # Duplicates the prep metrics jobs (which feed the server manifest):
+        # removing these changed main-workflow scheduling and left it pending,
+        # so they stay until that's understood.
         for part_info in part_infos:
             part = part_info.part
             if not self._is_analysis_target(part):
@@ -1242,7 +1291,6 @@ class CompressionSimulation:
             self.workflow_params[f"{metrics_job_name}.volume_resolution"] = json.dumps(
                 part_info.patch["resolution"]
             )
-            part_info.jobs["metrics"] = metrics_job_name
 
     def _add_to_workflow_compress(self, part_infos: list[PartInfo]):
         compress_job_name = "compress"
@@ -2047,16 +2095,7 @@ class CompressionSimulation:
                     data["ply"] = f"{name}/ply/part.####.ply"
 
                     # Sum interior volumes from all parts
-                    total_volume = 0.0
-                    for part_info in self.part_infos:
-                        if self._is_analysis_target(part_info.part):
-                            if part_info.disabled:
-                                continue
-                            metrics_job = part_info.jobs.get("metrics", "")
-                            if metrics_job:
-                                raw = w.get_parameter(f"{metrics_job}.interior_volume")
-                                if raw is not None:
-                                    total_volume += float(raw)
+                    total_volume = self._total_interior_volume(w)
 
                     result.update(
                         {
@@ -2280,18 +2319,7 @@ class CompressionSimulation:
                             }
 
             # Sum interior volumes across analysis-target parts.
-            total_volume = 0.0
-            for part_info in self.part_infos:
-                if not self._is_analysis_target(part_info.part):
-                    continue
-                if part_info.disabled:
-                    continue
-                metrics_job = part_info.jobs.get("metrics", "")
-                if not metrics_job:
-                    continue
-                raw = w.get_parameter(f"{metrics_job}.interior_volume")
-                if raw is not None:
-                    total_volume += float(raw)
+            total_volume = self._total_interior_volume(w)
 
             result.update(
                 {
@@ -2446,19 +2474,7 @@ class CompressionSimulation:
         Volume is inlined (from prep workflow parameters); energy values are
         refs that the server resolves from the energy-metrics job output."""
         scalars: dict[str, Any] = {}
-
-        total_volume = 0.0
-        for part_info in self.part_infos:
-            if not self._is_analysis_target(part_info.part):
-                continue
-            if part_info.disabled:
-                continue
-            metrics_job = part_info.jobs.get("metrics", "")
-            if metrics_job:
-                raw = workflow.get_parameter(f"{metrics_job}.interior_volume")
-                if raw is not None:
-                    total_volume += float(raw)
-        scalars["volume"] = total_volume
+        scalars["volume"] = self._total_interior_volume(workflow)
 
         if self._contains_step(WorkflowStepType.ENERGY_METRICS):
             em_job_id = job_id_lookup.get("energy-metrics", "")

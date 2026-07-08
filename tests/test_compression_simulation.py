@@ -167,13 +167,15 @@ class TestBuildWorkflow:
         assert isinstance(piston.part, ExperimentPistonBase)
         assert piston.material_index == 0
 
-    def test_build_workflow_has_per_part_metrics_jobs(self, prepared_sim):
-        yaml_str, _ = prepared_sim.build_workflow()
+    def test_prep_workflow_has_per_part_metrics_jobs(self, prepared_sim):
+        mesh_parts = [p for p in prepared_sim.part_infos if hasattr(p.part, "filename")]
+        yaml_str, _, _ = prepared_sim._build_sample_workflow_for_batch(mesh_parts)
         loaded = yaml.safe_load(yaml_str)
-        # one metrics job per non-piston mesh part
+        # one metrics job per non-piston mesh part, chained to its sample job
         for info in prepared_sim.part_infos:
             if not isinstance(info.part, ExperimentPistonBase) and hasattr(info.part, "filename"):
-                assert f"metrics-{info.part_unique_name}" in loaded["jobs"]
+                job = loaded["jobs"][f"metrics-{info.part_unique_name}"]
+                assert job["needs"] == [f"sample-mesh-{info.part_unique_name}"]
 
     def test_build_workflow_compress_has_velocity(self, prepared_sim):
         _, params = prepared_sim.build_workflow()

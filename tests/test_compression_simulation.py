@@ -579,6 +579,23 @@ jobs:
     - force-displacement
     assets:
       data: force-displacement
+  reduce-results:
+    type: sim/postprocess/reduce-results
+    needs:
+    - compress
+    - von-mises-stress
+    - effective-strain
+    - particle-displacement
+    assets:
+      data:
+      - job: compress
+        asset: output
+      - job: von-mises-stress
+        asset: output
+      - job: effective-strain
+        asset: output
+      - job: particle-displacement
+        asset: output
 """
         assert yaml_str.strip() == expected_yaml.strip()
 

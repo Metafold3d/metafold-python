@@ -311,6 +311,7 @@ class WorkflowStepType(Enum):
     STRESS_STRAIN = "stress_strain"
     PARTICLE_DISPLACEMENT = "particle_displacement"
     ENERGY_METRICS = "energy_metrics"
+    REDUCE_RESULTS = "reduce_results"
 
 
 class WorkflowStep:
@@ -444,6 +445,7 @@ class CompressionSimulation:
             # stress_strain is opt-in (not default): callers add it via workflow_steps.
             WorkflowStep(WorkflowStepType.PARTICLE_DISPLACEMENT),
             WorkflowStep(WorkflowStepType.ENERGY_METRICS),
+            # reduce-results is auto-added in build_workflow (not a step).
         ],
         force_reupload_files=False,
         prep_workflow_batch_size: int = 10,
@@ -1475,6 +1477,25 @@ class CompressionSimulation:
             part_infos, "force-displacement", "energy-metrics"
         )
 
+    # One merged reduce-results job consumes the particle-data outputs the
+    # browser renders and produces a compact (trimmed + int16 + decimated) HDF5.
+    # Auto-added whenever compress ran; the manifest points DTB at its output.
+    _REDUCE_SOURCE_JOBS = [
+        "compress", "von-mises-stress", "effective-strain",
+        "particle-displacement",
+    ]
+    _REDUCE_JOB_NAME = "reduce-results"
+
+    def _add_to_workflow_reduce_results(self):
+        sources = [j for j in self._REDUCE_SOURCE_JOBS if j in self.workflow_jobs]
+        if "compress" not in sources:
+            return  # nothing to preview without particle positions
+        self.workflow_jobs[self._REDUCE_JOB_NAME] = {
+            "type": "sim/postprocess/reduce-results",
+            "needs": sources,
+            "assets": {"data": [{"job": s, "asset": "output"} for s in sources]},
+        }
+
     def build_workflow(self, name_suffix=""):
         self.workflow_yaml = ""
         self.workflow_params = {}
@@ -1510,6 +1531,9 @@ class CompressionSimulation:
                 self._add_to_workflow_energy_metrics(part_infos_for_step)
             elif step.type == WorkflowStepType.COMPUTE_BVH:
                 pass  # this is done on the prep workflow, not here
+
+        # Always emit the browser preview when there's particle data to preview.
+        self._add_to_workflow_reduce_results()
 
         self.workflow_yaml = yaml.dump(
             {"jobs": self.workflow_jobs}, default_flow_style=False, sort_keys=False
@@ -2413,27 +2437,32 @@ class CompressionSimulation:
                 "particle-displacement",
             ),
         ]
+        # Point the particle datasets DTB renders at the merged reduce-results
+        # job (compact int16/decimated), falling back to the raw job if preview
+        # didn't run. Histograms are tiny — leave them on the raw job.
+        reduce_job_id = job_id_lookup.get(self._REDUCE_JOB_NAME, "")
         for step, dataset_root, key_prefix, has_histogram, local_job in full_hdf_refs:
             if not self._contains_step(step):
                 continue
-            job_id = job_id_lookup.get(local_job, "")
+            raw_job_id = job_id_lookup.get(local_job, "")
+            data_job_id = reduce_job_id or raw_job_id
             for i in range(n_materials):
                 if self.part_infos[i].disabled:
                     continue
                 server_data[f"{key_prefix}{i}"] = {
-                    "jobId": job_id,
+                    "jobId": data_job_id,
                     "assetName": "output",
                     "path": f"/material{i}/{dataset_root}",
                 }
                 if has_histogram:
                     server_data[f"{key_prefix}Histogram{i}"] = {
-                        "jobId": job_id,
+                        "jobId": raw_job_id,
                         "assetName": "output",
                         "path": f"/material{i}/{dataset_root}_histogram",
                     }
 
         if self._contains_step(WorkflowStepType.COMPRESS):
-            job_id = job_id_lookup.get("compress", "")
+            job_id = reduce_job_id or job_id_lookup.get("compress", "")
             for i in range(n_materials):
                 if self.part_infos[i].disabled:
                     continue

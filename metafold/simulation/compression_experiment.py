@@ -1,6 +1,6 @@
 import copy
 import json
-from typing import Any, List, Union, cast
+from typing import Any, List, Optional, Union, cast
 import glob
 from pathlib import Path
 from metafold.simulation.compression_simulation import (
@@ -106,6 +106,41 @@ class VarySimulationParameter(ExperimentVarying):
         setattr(obj, parts[-1], self.values[sim_index])
 
 
+class VaryVelocity(ExperimentVarying):
+    """Vary a rigid part's velocity keyframes (e.g. a piston's motion profile).
+    Each value is a full velocity profile: a list of [t, vx, vy, vz] rows."""
+
+    part_name: str
+    velocities: List[list]
+
+    def __init__(self, part_name: str, velocities: List[list]):
+        # Each element is one profile: a list of [t,vx,vy,vz] rows.
+        for i, profile in enumerate(velocities):
+            if (
+                not isinstance(profile, list)
+                or not profile
+                or not all(isinstance(row, list) and len(row) == 4 for row in profile)
+            ):
+                raise ValueError(
+                    f"velocity profile {i} for part {part_name!r} must be a list "
+                    f"of [t, vx, vy, vz] rows, got: {profile!r}"
+                )
+        self.part_name = part_name
+        self.velocities = velocities
+
+    def resolve(self, _base_dir: Path) -> None:
+        self.sim_count = len(self.velocities)
+
+    def apply_to(self, sim_index: int, sim: CompressionSimulation):
+        part_info: CompressionSimulation.PartInfo = sim.get_part_info(self.part_name)
+        if not hasattr(part_info.part, "velocity"):
+            # Only rigid (piston/support) parts consume a velocity profile.
+            raise ValueError(
+                f"Part {self.part_name!r} is not a rigid (piston/support) part "
+            )
+        part_info.part.velocity = self.velocities[sim_index]
+
+
 class CompressionExperiment:
     base_simulation: CompressionSimulation
     varying: List[ExperimentVarying] = []
@@ -124,12 +159,16 @@ class CompressionExperiment:
         auto_upload_server_manifest: bool = True,
         use_legacy_results_format: bool = False,
         write_ups: bool = True,
+        simulation_names: Optional[List[str]] = None,
     ):
         simulation.use_legacy_results_format = use_legacy_results_format
         simulation.write_ups = write_ups
         self.use_legacy_results_format = use_legacy_results_format
         self.base_simulation = simulation
         self.varying = varying
+        # Optional per-simulation display names (index-aligned). A blank/missing
+        # entry falls back to the auto "<base>_sim<index>" name.
+        self.simulation_names = simulation_names or []
         self.verbose = verbose
         self.force_rerun = force_rerun
         self.varying_part_names = []
@@ -139,11 +178,56 @@ class CompressionExperiment:
             if hasattr(v, "part_name"):
                 self.varying_part_names.append(v.part_name)
 
+        # Every varying must produce the same number of variants — prepare()
+        # sizes the sim loop from one of them and indexes into all of them.
+        counts = {v.sim_count for v in self.varying}
+        if len(counts) > 1:
+            raise ValueError(
+                "All varying entries must have the same number of values, got "
+                f"counts: {sorted(counts)}"
+            )
+
+        self._validate_simulation_names()
+
         if auto_run:
             self.prepare()
             self.run(auto_upload_server_manifest)
             if auto_download_results:
                 self.download_results()
+
+    def _sim_name(self, sim_index: int) -> str:
+        """Name for the sim at sim_index: the caller-supplied name when present,
+        otherwise the auto "<base>_sim<index>" name."""
+        custom = (
+            self.simulation_names[sim_index]
+            if sim_index < len(self.simulation_names)
+            else None
+        )
+        return custom or f"{self.base_simulation.simulation_name}_sim{sim_index}"
+
+    def _validate_simulation_names(self):
+        """Names must be a list of path-safe strings and resolve to a unique
+        name per sim (they become filenames and zip member paths)."""
+        if not isinstance(self.simulation_names, list) or not all(
+            isinstance(n, str) for n in self.simulation_names
+        ):
+            raise ValueError(
+                f"simulation_names must be a list of strings, got: "
+                f"{self.simulation_names!r}"
+            )
+        for name in self.simulation_names:
+            if any(c in name for c in "/\\:"):
+                raise ValueError(
+                    f"simulation name {name!r} contains a path separator"
+                )
+
+        sim_count = self.varying[0].sim_count if self.varying else 1
+        resolved = [self._sim_name(i) for i in range(sim_count)]
+        duplicates = {n for n in resolved if resolved.count(n) > 1}
+        if duplicates:
+            raise ValueError(
+                f"simulation names must be unique, duplicated: {sorted(duplicates)}"
+            )
 
     @property
     def _experiment_state_filename(self) -> Path:
@@ -157,12 +241,18 @@ class CompressionExperiment:
         """Delete the experiment state file and all per-sim results files."""
         if self._experiment_state_filename.is_file():
             self._experiment_state_filename.unlink()
-        # delete per-sim results — we don't know sim names without state,
-        # so just glob for anything matching the pattern
+        # delete per-sim results: auto-named sims match the glob pattern,
+        # custom-named sims are deleted by name
         for f in self.base_simulation.out_dir.glob(
             f"{self.base_simulation.simulation_name}_sim*_results.json"
         ):
             f.unlink()
+        for name in self.simulation_names:
+            if not name:
+                continue
+            f = self.base_simulation.out_dir / f"{name}_results.json"
+            if f.is_file():
+                f.unlink()
         # delete out.zip if it exists
         out_zip = self.base_simulation.out_dir / "out.zip"
         if out_zip.is_file():
@@ -193,7 +283,7 @@ class CompressionExperiment:
         self.base_simulation.part_infos = base_part_infos
 
         # give each sim a unique name so zip paths don't collide
-        clone.simulation_name = f"{self.base_simulation.simulation_name}_sim{sim_index}"
+        clone.simulation_name = self._sim_name(sim_index)
 
         # ok now for the part infos we want to do something different, we want to keep shared elements the same but fork
         # the part infos which we are varying, that way we dont mess up other copies when experiments vary things

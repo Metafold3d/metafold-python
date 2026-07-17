@@ -110,6 +110,18 @@ class TestBuildParts:
         assert isinstance(parts[0], ExperimentPistonMesh)
         assert parts[0].filename == "piston.ply"
 
+    def test_piston_parts_custom_name(self):
+        parts = _build_parts([
+            {"type": "piston_mesh", "name": "last", "file": "last.ply"},
+            {"type": "piston_cylinder", "name": "press"},
+            {"type": "piston_box", "name": "anvil"},
+        ])
+        assert [p.name for p in parts] == ["last", "press", "anvil"]
+
+    def test_piston_parts_default_name_when_omitted(self):
+        parts = _build_parts([{"type": "piston_mesh", "file": "piston.ply"}])
+        assert parts[0].name == "piston"
+
     def test_piston_mesh_with_velocity(self):
         velocity = [[0.0, 0, 0, 0.0], [0.02, 0, 0, -1.25], [0.04, 0, 0, 0.0]]
         parts = _build_parts([{"type": "piston_mesh", "file": "piston.ply", "velocity": velocity}])

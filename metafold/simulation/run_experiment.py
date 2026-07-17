@@ -92,9 +92,9 @@ JSON manifest format
     ],
 
     # Optional display name per simulation variant, index-aligned with the variants
-    # the varying entries produce. A blank/missing entry falls back to "<name>_sim<i>".
-    # Names must be unique and must not contain path separators.
-    "simulation_names": ["slow piston", "fast piston", "fastest piston"]
+    # the varying entries produce. A null/blank/missing entry falls back to
+    # "<name>_sim<i>". Names must be unique and must not contain path separators.
+    "simulation_names": ["slow piston", null, "fastest piston"]
 }
 
 Available material presets
@@ -193,6 +193,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
 
         if part_type == "piston_cylinder":
             kwargs = {}
+            if "name" in entry:
+                kwargs["name"] = entry["name"]
             if "velocity" in entry:
                 kwargs["velocity"] = entry["velocity"]
             if "shape_parameters" in entry:
@@ -203,6 +205,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
 
         elif part_type == "piston_box":
             kwargs = {}
+            if "name" in entry:
+                kwargs["name"] = entry["name"]
             if "velocity" in entry:
                 kwargs["velocity"] = entry["velocity"]
             if "shape_parameters" in entry:
@@ -213,6 +217,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
 
         elif part_type == "piston_mesh":
             kwargs = {"filename": entry["file"]}
+            if "name" in entry:
+                kwargs["name"] = entry["name"]
             if "velocity" in entry:
                 kwargs["velocity"] = entry["velocity"]
             if "material" in entry:
@@ -240,14 +246,6 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
 def _build_varying(varying_config: list[dict]) -> list[ExperimentVarying]:
     varying: list[ExperimentVarying] = []
     for entry in varying_config:
-        # Each entry varies exactly one thing; to vary several, use several entries.
-        kinds = [k for k in ("files", "material", "velocity", "values") if k in entry]
-        if len(kinds) > 1:
-            raise ValueError(
-                f"varying entry may only vary one of files/material/velocity/values, "
-                f"got {kinds}: {entry}"
-            )
-
         if "part" in entry and "files" in entry:
             files = entry["files"]
             if not isinstance(files, list):

@@ -547,7 +547,7 @@ wheels = [
 
 [[package]]
 name = "metafold"
-version = "0.13.dev1"
+version = "0.13.dev2"
 source = { editable = "." }
 dependencies = [
     { name = "attrs", marker = "sys_platform == 'linux'" },

@@ -331,6 +331,12 @@ class TestSimulationNames:
         with pytest.raises(ValueError, match="path separator"):
             self._experiment(mock_sim, ["run/1"])
 
+    def test_none_entry_falls_back_to_auto(self, mock_sim):
+        exp = self._experiment(mock_sim, [None, "custom2", None])
+        exp.prepare()
+        assert [s.simulation_name for s in exp.sims] == [
+            "base_sim_sim0", "custom2", "base_sim_sim2"]
+
     def test_non_list_rejected(self, mock_sim):
         with pytest.raises(ValueError, match="list of strings"):
             self._experiment(mock_sim, "baseline")

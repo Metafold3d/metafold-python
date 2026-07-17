@@ -36,6 +36,7 @@ from metafold.simulation.compression_experiment import (
     VaryMaterial,
     VaryMesh,
     VarySimulationParameter,
+    VaryVelocity,
 )
 
 
@@ -220,6 +221,20 @@ class TestBuildVarying:
         assert varying[0].field_path == "max_time"
         assert varying[0].values == [0.02, 0.04, 0.06]
 
+    def test_vary_velocity(self):
+        profiles = [
+            [[0.0, 0, 0, 0.0], [0.04, 0, 0, -1.25]],
+            [[0.0, 0, 0, 0.0], [0.04, 0, 0, -2.50]],
+        ]
+        varying = _build_varying([{"part": "piston", "velocity": profiles}])
+        assert isinstance(varying[0], VaryVelocity)
+        assert varying[0].part_name == "piston"
+        assert varying[0].velocities == profiles
+
+    def test_vary_velocity_non_list_rejected(self):
+        with pytest.raises(ValueError, match="velocity"):
+            _build_varying([{"part": "piston", "velocity": "nope"}])
+
     def test_unrecognised_entry_raises(self):
         with pytest.raises(ValueError, match="Unrecognised varying"):
             _build_varying([{"unknown_key": "foo"}])
@@ -393,6 +408,26 @@ class TestRunExperiment:
         params = captured["simulation_parameters"]
         assert params.max_time == 0.02
         assert params.max_resolution == 128
+
+    def test_simulation_names_passed_to_experiment(self, ply_folder, tmp_path):
+        fake_sim = self._fake_sim(ply_folder)
+        captured = {}
+
+        def capture_experiment(*args, **kwargs):
+            captured.update(kwargs)
+
+        with (
+            patch("metafold.simulation.run_experiment.CompressionSimulation", return_value=fake_sim),
+            patch("metafold.simulation.run_experiment.CompressionExperiment", side_effect=capture_experiment),
+        ):
+            run_experiment({
+                "project_name": "t",
+                "output_path": str(tmp_path / "out"),
+                "parts": [],
+                "simulation_names": ["baseline", "stiff outsole"],
+            })
+
+        assert captured["simulation_names"] == ["baseline", "stiff outsole"]
 
     def test_workflow_steps_config_passed_to_simulation(self, ply_folder, tmp_path):
         fake_sim = self._fake_sim(ply_folder)

@@ -55,7 +55,14 @@ JSON manifest format
                 }
             }
         ]},
-        {"field": "max_time", "values": [0.02, 0.04]}
+        # A rigid part's velocity keyframes; each value is a full [t,vx,vy,vz] profile:
+        {"part": "piston", "velocity": [
+            [[0.0, 0, 0, 0.0], [0.04, 0, 0, -1.25]],
+            [[0.0, 0, 0, 0.0], [0.04, 0, 0, -2.50]],
+            [[0.0, 0, 0, 0.0], [0.04, 0, 0, -5.00]]
+        ]},
+        # Every varying entry must have the same number of values (one per variant).
+        {"field": "max_time", "values": [0.02, 0.04, 0.06]}
     ],
 
     "simulation": {
@@ -82,7 +89,12 @@ JSON manifest format
         "compress",
         "force_displacement",
         {"step": "metrics", "parts": ["midsole", "outsole"]}
-    ]
+    ],
+
+    # Optional display name per simulation variant, index-aligned with the variants
+    # the varying entries produce. A blank/missing entry falls back to "<name>_sim<i>".
+    # Names must be unique and must not contain path separators.
+    "simulation_names": ["slow piston", "fast piston", "fastest piston"]
 }
 
 Available material presets
@@ -137,6 +149,7 @@ from metafold.simulation.compression_experiment import (
     VaryMaterial,
     VaryMesh,
     VarySimulationParameter,
+    VaryVelocity,
 )
 from metafold.simulation.compression_simulation import (
     CompressionSimulation,
@@ -227,6 +240,14 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
 def _build_varying(varying_config: list[dict]) -> list[ExperimentVarying]:
     varying: list[ExperimentVarying] = []
     for entry in varying_config:
+        # Each entry varies exactly one thing; to vary several, use several entries.
+        kinds = [k for k in ("files", "material", "velocity", "values") if k in entry]
+        if len(kinds) > 1:
+            raise ValueError(
+                f"varying entry may only vary one of files/material/velocity/values, "
+                f"got {kinds}: {entry}"
+            )
+
         if "part" in entry and "files" in entry:
             files = entry["files"]
             if not isinstance(files, list):
@@ -242,6 +263,14 @@ def _build_varying(varying_config: list[dict]) -> list[ExperimentVarying]:
             varying.append(
                 VaryMaterial(entry["part"], [_resolve_material(m) for m in materials])
             )
+
+        elif "part" in entry and "velocity" in entry:
+            velocities = entry["velocity"]
+            if not isinstance(velocities, list):
+                raise ValueError(
+                    f"varying 'velocity' must be a list of velocity profiles, got: {velocities!r}"
+                )
+            varying.append(VaryVelocity(entry["part"], velocities))
 
         elif "field" in entry and "values" in entry:
             varying.append(VarySimulationParameter(entry["field"], entry["values"]))
@@ -366,6 +395,7 @@ def run_experiment(
     CompressionExperiment(
         simulation=sim,
         varying=varying,
+        simulation_names=config.get("simulation_names"),
         auto_download_results=wait_for_results,
     )
 

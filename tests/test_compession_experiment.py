@@ -4,7 +4,13 @@ import copy
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from metafold.simulation.compression_experiment import CompressionExperiment, VaryMesh, VaryMaterial, VarySimulationParameter
+from metafold.simulation.compression_experiment import (
+    CompressionExperiment,
+    VaryMesh,
+    VaryMaterial,
+    VarySimulationParameter,
+    VaryVelocity,
+)
 from metafold.materials import Material, ConstitutiveModel, RigidParams
 
 
@@ -244,6 +250,126 @@ class TestVaryMaterialSweep:
         # mutating one shouldn't affect the other
         v.materials[0].constitutive_model.params.shear_modulus = 999.0
         assert v.materials[1].constitutive_model.params.shear_modulus == 20.0
+
+
+PROFILES = [
+    [[0.0, 0, 0, 0.0], [0.04, 0, 0, -1.25]],
+    [[0.0, 0, 0, 0.0], [0.04, 0, 0, -2.50]],
+]
+
+
+class TestVaryVelocity:
+    def test_resolve_sets_sim_count(self, tmp_path):
+        v = VaryVelocity("piston", PROFILES)
+        v.resolve(tmp_path)
+        assert v.sim_count == 2
+
+    def test_apply_to_sets_velocity(self, mock_sim):
+        v = VaryVelocity("piston", PROFILES)
+        v.apply_to(0, mock_sim)
+        assert mock_sim.get_part_info("piston").part.velocity == PROFILES[0]
+        v.apply_to(1, mock_sim)
+        assert mock_sim.get_part_info("piston").part.velocity == PROFILES[1]
+
+    def test_single_flat_profile_rejected(self):
+        # one profile passed where a list of profiles is expected
+        with pytest.raises(ValueError, match="list of \\[t, vx, vy, vz\\] rows"):
+            VaryVelocity("piston", [[0.0, 0, 0, 0.0], [0.04, 0, 0, -1.25]])
+
+    def test_malformed_row_rejected(self):
+        with pytest.raises(ValueError, match="rows"):
+            VaryVelocity("piston", [[[0.0, 0, 0]]])  # 3 floats, not 4
+
+    def test_non_rigid_part_rejected(self, mock_sim):
+        class PlainPart:  # no velocity attribute, unlike piston/support parts
+            name = "midsole"
+
+        info = MagicMock()
+        info.part = PlainPart()
+        mock_sim.get_part_info.side_effect = lambda n: info
+
+        v = VaryVelocity("midsole", PROFILES)
+        with pytest.raises(ValueError, match="not a rigid"):
+            v.apply_to(0, mock_sim)
+
+
+class TestSimulationNames:
+    def _experiment(self, mock_sim, names, varying=None):
+        return CompressionExperiment(
+            mock_sim,
+            varying if varying is not None else [VaryMesh("midsole", "mid-*.ply")],
+            simulation_names=names,
+            auto_run=False,
+        )
+
+    def test_custom_names_used(self, mock_sim):
+        exp = self._experiment(mock_sim, ["a", "b", "c"])
+        exp.prepare()
+        assert [s.simulation_name for s in exp.sims] == ["a", "b", "c"]
+
+    def test_blank_name_falls_back_to_auto(self, mock_sim):
+        exp = self._experiment(mock_sim, ["a", "", "c"])
+        exp.prepare()
+        assert [s.simulation_name for s in exp.sims] == ["a", "base_sim_sim1", "c"]
+
+    def test_short_list_falls_back_to_auto(self, mock_sim):
+        exp = self._experiment(mock_sim, ["a"])
+        exp.prepare()
+        assert [s.simulation_name for s in exp.sims] == [
+            "a", "base_sim_sim1", "base_sim_sim2"]
+
+    def test_duplicate_names_rejected(self, mock_sim):
+        with pytest.raises(ValueError, match="unique"):
+            self._experiment(mock_sim, ["a", "a", "c"])
+
+    def test_name_colliding_with_auto_name_rejected(self, mock_sim):
+        # sim1's fallback name is base_sim_sim1; naming sim0 the same collides
+        with pytest.raises(ValueError, match="unique"):
+            self._experiment(mock_sim, ["base_sim_sim1"])
+
+    def test_path_separator_rejected(self, mock_sim):
+        with pytest.raises(ValueError, match="path separator"):
+            self._experiment(mock_sim, ["run/1"])
+
+    def test_non_list_rejected(self, mock_sim):
+        with pytest.raises(ValueError, match="list of strings"):
+            self._experiment(mock_sim, "baseline")
+
+    def test_non_string_entry_rejected(self, mock_sim):
+        with pytest.raises(ValueError, match="list of strings"):
+            self._experiment(mock_sim, ["a", 2])
+
+    def test_force_rerun_clears_custom_named_results(self, mock_sim):
+        stale = mock_sim.out_dir / "custom_a_results.json"
+        stale.write_text("{}")
+        exp = self._experiment(mock_sim, ["custom_a", "b", "c"])
+        exp.force_rerun = True
+        exp._clear_saved_state()
+        assert not stale.exists()
+
+
+class TestVaryingCountMismatch:
+    def test_mismatched_counts_rejected(self, mock_sim):
+        with pytest.raises(ValueError, match="same number"):
+            CompressionExperiment(
+                mock_sim,
+                [
+                    VaryMesh("midsole", "mid-*.ply"),  # 3 files
+                    VaryVelocity("piston", PROFILES),  # 2 profiles
+                ],
+                auto_run=False,
+            )
+
+    def test_matching_counts_accepted(self, mock_sim):
+        exp = CompressionExperiment(
+            mock_sim,
+            [
+                VarySimulationParameter("max_time", [0.02, 0.04]),
+                VaryVelocity("piston", PROFILES),
+            ],
+            auto_run=False,
+        )
+        assert exp.varying[0].sim_count == exp.varying[1].sim_count == 2
 
 
 class TestVarySimulationParameter:

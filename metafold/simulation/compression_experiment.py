@@ -206,15 +206,17 @@ class CompressionExperiment:
         return custom or f"{self.base_simulation.simulation_name}_sim{sim_index}"
 
     def _validate_simulation_names(self):
-        """Names must be a list of path-safe strings and resolve to a unique
-        name per sim (they become filenames and zip member paths)."""
+        """Names must be a list of path-safe strings (None or "" = use the
+        auto name) and resolve to a unique name per sim (they become filenames
+        and zip member paths)."""
         if not isinstance(self.simulation_names, list) or not all(
-            isinstance(n, str) for n in self.simulation_names
+            n is None or isinstance(n, str) for n in self.simulation_names
         ):
             raise ValueError(
                 f"simulation_names must be a list of strings, got: "
                 f"{self.simulation_names!r}"
             )
+        self.simulation_names = [n or "" for n in self.simulation_names]
         for name in self.simulation_names:
             if any(c in name for c in "/\\:"):
                 raise ValueError(

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metafold"
-version = "0.13.dev1"
+version = "0.13.dev2"
 authors = [
     {name = "Metafold 3D", email = "info@metafold3d.com"},
 ]

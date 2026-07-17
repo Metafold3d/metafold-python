@@ -2544,6 +2544,10 @@ class CompressionSimulation:
                 server_result["data"] = {}
             server_results.append(server_result)
 
+        # ensure material index is set on all parts for a multi-simulation experiment
+        for i, part_info in enumerate(self.part_infos):
+            part_info.material_index = i
+
         self.make_manifest_v2(results=server_results)
         manifest = copy.deepcopy(self.manifest)
         manifest["results"] = server_results

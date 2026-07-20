@@ -13,9 +13,11 @@ class Access(Enum):
     Attributes:
         PRIVATE: Project is private to owner.
         PUBLIC: Project may be accessed by unauthenticated users.
+        ORG: Project may be accessed by members of the same organization.
     """
     PRIVATE = "private"
     PUBLIC = "public"
+    ORG = "org"
 
 
 class ProjectType(Enum):
@@ -65,7 +67,7 @@ class Project:
     access: Access = field(converter=check_access)
     created: datetime = field(converter=asdatetime)
     modified: datetime = field(converter=asdatetime)
-    type: ProjectType = field(converter=check_project_type, default=ProjectType.UNSPECIFIED) 
+    type: ProjectType = field(converter=check_project_type, default=ProjectType.UNSPECIFIED)
     thumbnail: str | None = None
     project: dict[str, Any] | None = None
     graph: dict[str, Any] | None = None

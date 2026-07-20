@@ -611,6 +611,7 @@ class CompressionSimulation:
         auth_domain: str = "metafold3d.us.auth0.com",
         base_url: str = "https://api.metafold3d.com/",
         cancel_existing_workflows: bool = True,
+        project_access: Access = Access.PRIVATE,
     ) -> str:
         """Find an existing project by name or create a new one.
 
@@ -642,7 +643,7 @@ class CompressionSimulation:
             return project_id
         created = client.projects.create(
             project_name,
-            access=Access.PRIVATE,
+            access=project_access,
             type=ProjectType.DIGITAL_TEST_BENCH_EXPERIMENT,
         )
         return created.id

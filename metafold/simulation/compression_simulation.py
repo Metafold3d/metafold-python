@@ -72,6 +72,14 @@ ZERO_VELOCITY = [
 ]
 
 
+def _has_motion(velocity: Optional[list]) -> bool:
+    """True if a velocity profile has any non-zero component.
+    [time, vx, vy, vz]."""
+    if not velocity:
+        return False
+    return any(any(c for c in row[1:4]) for row in velocity)
+
+
 class BoundaryCondition(Enum):
     SYMMETRIC          = "symmetric"           # symmetry plane (acts as frictionless wall)
     VELOCITY_DIRICHLET = "velocity_dirichlet"  # velocity fixed to zero at the face
@@ -481,6 +489,30 @@ class CompressionSimulation:
                 self.part_infos.insert(0, inner_part)
             else:
                 self.part_infos.append(inner_part)
+
+        # A rigid part drives the compression.
+        if parts:
+            has_piston = False
+            has_support = False
+            piston_moves = False
+            for p in parts:
+                if isinstance(p, ExperimentPistonBase):
+                    has_piston = True
+                    piston_moves = piston_moves or _has_motion(p.velocity)
+                elif isinstance(p, ExperimentSupportBase):
+                    has_support = True
+            if not has_piston and not has_support:
+                raise ValueError(
+                    "No piston part: a compression simulation needs "
+                    "a rigid part to apply load. Add a part of type piston_mesh, "
+                    "piston_cylinder, or piston_box."
+                )
+            # Supports are stationary by design, so only pistons must move.
+            if has_piston and not piston_moves:
+                raise ValueError(
+                    "Piston velocity is zero. Set a velocity "
+                    "profile of [time, vx, vy, vz] rows with a non-zero component."
+                )
 
         self.setup_ply_files(stl_folder_path)
         self.setup_results(output_path)

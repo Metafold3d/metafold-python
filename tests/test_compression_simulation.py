@@ -15,6 +15,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentPistonBase,
     ExperimentPistonCylinder,
     ExperimentPistonMesh,
+    ExperimentSupportMesh,
     SimulationParameters,
     WorkflowStep,
     WorkflowStepType,
@@ -84,6 +85,7 @@ class TestConstruction:
 
     def test_missing_ply_raises(self, ply_folder, tmp_path):
         parts = [
+            ExperimentPistonCylinder(),
             ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "nonexistent.ply"),
         ]
         with pytest.raises(ValueError, match="not found"):
@@ -94,6 +96,82 @@ class TestConstruction:
                 output_path=str(tmp_path / "out"),
                 client=MagicMock(),
             )
+
+    def test_no_piston_raises(self, ply_folder, tmp_path):
+        # Without a rigid part nothing drives the compression
+        parts = [
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+            ExperimentMesh("outsole", DEFAULT_OUTSOLE, "out.ply"),
+        ]
+        with pytest.raises(ValueError, match="piston"):
+            CompressionSimulation(
+                parts=parts,
+                simulation_name="t",
+                stl_folder_path=str(ply_folder),
+                output_path=str(tmp_path / "out"),
+                client=MagicMock(),
+            )
+
+    def test_zero_piston_velocity_raises(self, ply_folder, tmp_path):
+        # A piston that never moves applies no load
+        parts = [
+            ExperimentPistonCylinder(velocity=[[0.0, 0, 0, 0.0], [0.04, 0, 0, 0.0]]),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+        ]
+        with pytest.raises(ValueError, match="velocity is zero"):
+            CompressionSimulation(
+                parts=parts,
+                simulation_name="t",
+                stl_folder_path=str(ply_folder),
+                output_path=str(tmp_path / "out"),
+                client=MagicMock(),
+            )
+
+    def test_empty_piston_velocity_raises(self, ply_folder, tmp_path):
+        parts = [
+            ExperimentPistonCylinder(velocity=[]),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+        ]
+        with pytest.raises(ValueError, match="velocity is zero"):
+            CompressionSimulation(
+                parts=parts,
+                simulation_name="t",
+                stl_folder_path=str(ply_folder),
+                output_path=str(tmp_path / "out"),
+                client=MagicMock(),
+            )
+
+    def test_stationary_support_with_moving_piston_ok(self, ply_folder, tmp_path):
+        # Supports are stationary by design; only the piston must move.
+        parts = [
+            ExperimentPistonCylinder(),  # default velocity moves
+            ExperimentSupportMesh(name="base", filename="top.ply"),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+        ]
+        sim = CompressionSimulation(
+            parts=parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        assert len(sim.part_infos) == 3
+
+    def test_support_part_satisfies_rigid_requirement(self, ply_folder, tmp_path):
+        # A support is also a rigid driver, so it's a valid alternative to a piston.
+        parts = [
+            ExperimentSupportMesh(name="base", filename="top.ply"),
+            ExperimentMesh("midsole", DEFAULT_MIDSOLE_NOMINAL, "mid.ply"),
+        ]
+        sim = CompressionSimulation(
+            parts=parts,
+            simulation_name="t",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        assert len(sim.part_infos) == 2
+
 
 class TestWorkflowStepsInput:
     def test_accepts_workflow_step_instance(self):

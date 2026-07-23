@@ -299,6 +299,39 @@ class ExperimentSupportParallelepiped(ExperimentParallelepiped, ExperimentSuppor
     material: Material = field(default_factory=lambda: DEFAULT_SUPPORT_MATERIAL)
 
 
+def validate_simulation_parts(parts: list) -> None:
+    """Raise ValueError if the parts can't produce a compression simulation.
+
+    Callers that dispatch work asynchronously should call this up front so
+    invalid input fails before any project or job is created.
+    """
+    if not parts:
+        return
+
+    has_piston = False
+    has_support = False
+    piston_moves = False
+    for p in parts:
+        if isinstance(p, ExperimentPistonBase):
+            has_piston = True
+            piston_moves = piston_moves or _has_motion(p.velocity)
+        elif isinstance(p, ExperimentSupportBase):
+            has_support = True
+
+    if not has_piston and not has_support:
+        raise ValueError(
+            "No piston part: a compression simulation needs "
+            "a rigid part to apply load. Add a part of type piston_mesh, "
+            "piston_cylinder, or piston_box."
+        )
+    # Supports are stationary by design, so only pistons must move.
+    if has_piston and not piston_moves:
+        raise ValueError(
+            "Piston velocity is zero. Set a velocity "
+            "profile of [time, vx, vy, vz] rows with a non-zero component."
+        )
+
+
 @dataclass
 class ReferenceData:
     csv_path: Path = Path("")
@@ -491,28 +524,7 @@ class CompressionSimulation:
                 self.part_infos.append(inner_part)
 
         # A rigid part drives the compression.
-        if parts:
-            has_piston = False
-            has_support = False
-            piston_moves = False
-            for p in parts:
-                if isinstance(p, ExperimentPistonBase):
-                    has_piston = True
-                    piston_moves = piston_moves or _has_motion(p.velocity)
-                elif isinstance(p, ExperimentSupportBase):
-                    has_support = True
-            if not has_piston and not has_support:
-                raise ValueError(
-                    "No piston part: a compression simulation needs "
-                    "a rigid part to apply load. Add a part of type piston_mesh, "
-                    "piston_cylinder, or piston_box."
-                )
-            # Supports are stationary by design, so only pistons must move.
-            if has_piston and not piston_moves:
-                raise ValueError(
-                    "Piston velocity is zero. Set a velocity "
-                    "profile of [time, vx, vy, vz] rows with a non-zero component."
-                )
+        validate_simulation_parts(parts)
 
         self.setup_ply_files(stl_folder_path)
         self.setup_results(output_path)

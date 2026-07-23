@@ -160,6 +160,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentPistonMesh,
     SimulationParameters,
     WorkflowStep,
+    validate_simulation_parts,
 )
 
 # Build preset lookup from all Material constants in the materials module.
@@ -241,6 +242,16 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 )
             )
     return parts
+
+
+def validate_experiment_config(config: dict) -> None:
+    """Raise ValueError if a manifest can't produce a runnable experiment.
+    Mirrors the checks run_experiment performs so an API can reject bad
+    input before creating a project.
+    """
+    if not config.get("project_name", ""):
+        raise ValueError("project_name is required")
+    validate_simulation_parts(_build_parts(config.get("parts", [])))
 
 
 def _build_varying(varying_config: list[dict]) -> list[ExperimentVarying]:

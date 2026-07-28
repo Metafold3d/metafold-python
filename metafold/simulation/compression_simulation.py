@@ -656,12 +656,17 @@ class CompressionSimulation:
         base_url: str = "https://api.metafold3d.com/",
         cancel_existing_workflows: bool = True,
         project_access: Access = Access.PRIVATE,
+        user: Optional[str] = None,
     ) -> str:
         """Find an existing project by name or create a new one.
 
         Supply either access_token (server context — never reads from env) or
         client_id + client_secret (local/programmable use, reads from env via
         setup_client). base_url must match the audience the token was issued for.
+
+        When user is given, only the caller's own projects are reused; a
+        same-named project owned by someone else (visible under org access) is
+        ignored so it can't be overwritten.
 
         When cancel_existing_workflows is True and an existing project is
         reused, its running workflows are cancelled first.
@@ -675,10 +680,14 @@ class CompressionSimulation:
             auth_domain=auth_domain,
             base_url=base_url,
         )
-        # Quote the project_name string for multi-word name searchess
+        # Quote the values so multi-word names stay a single search term.
+        q = f'name:"{project_name}"'
+        if user is not None:
+            q = f'{q} AND user:"{user}"'
         existing = [
-            p for p in client.projects.list(q=f'name:"{project_name}"')
+            p for p in client.projects.list(q=q)
             if p.name == project_name  # ensure full match
+            and (user is None or p.user == user)
         ]
         if existing:
             project_id = existing[0].id

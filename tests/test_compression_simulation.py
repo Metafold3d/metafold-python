@@ -1,4 +1,5 @@
 from io import BytesIO
+from copy import deepcopy
 from types import SimpleNamespace
 from zipfile import ZipFile
 
@@ -16,6 +17,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentPistonCylinder,
     ExperimentPistonMesh,
     ExperimentSupportMesh,
+    ForceLimit,
     SimulationParameters,
     WorkflowStep,
     WorkflowStepType,
@@ -723,6 +725,28 @@ jobs:
         for key, value in expected_params.items():
             assert key in workflow_params, f"missing key: {key}"
             assert workflow_params[key] == value, f"mismatch for {key}: {workflow_params[key]!r} != {value!r}"
+
+
+class TestSimConfig:
+    def test_force_limit(self, ply_folder, basic_parts, tmp_path):
+        parts = deepcopy(basic_parts)
+        parts[0].force_limit = ForceLimit("zminus", 2000)
+        sim = CompressionSimulation(
+            parts=parts,
+            simulation_name="test_sim",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        sim.create_sim_config()
+        contact = sim.ups.findall("./MaterialProperties/MPM/contact")[0]
+        for tag, value in [
+            ("condition", "zminus"),
+            ("conditionValue", "2000"),
+            ("conditionAction", "GoToZeroVelocity"),
+        ]:
+            assert contact.find(tag) is not None
+            assert contact.find(tag).text == value
 
 
 class TestStressStrainPerPart:

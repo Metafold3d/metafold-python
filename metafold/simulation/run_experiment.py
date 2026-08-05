@@ -158,6 +158,7 @@ from metafold.simulation.compression_simulation import (
     ExperimentPistonBox,
     ExperimentPistonCylinder,
     ExperimentPistonMesh,
+    ForceLimit,
     SimulationParameters,
     WorkflowStep,
     validate_simulation_parts,
@@ -202,6 +203,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["shape_parameters"] = entry["shape_parameters"]
             if "material" in entry:
                 kwargs["material"] = _resolve_material(entry["material"])
+            if "force_limit" in entry:
+                kwargs["force_limit"] = ForceLimit(**entry["force_limit"])
             parts.append(ExperimentPistonCylinder(**kwargs))
 
         elif part_type == "piston_box":
@@ -214,6 +217,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["shape_parameters"] = entry["shape_parameters"]
             if "material" in entry:
                 kwargs["material"] = _resolve_material(entry["material"])
+            if "force_limit" in entry:
+                kwargs["force_limit"] = ForceLimit(**entry["force_limit"])
             parts.append(ExperimentPistonBox(**kwargs))
 
         elif part_type == "piston_mesh":
@@ -224,6 +229,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["velocity"] = entry["velocity"]
             if "material" in entry:
                 kwargs["material"] = _resolve_material(entry["material"])
+            if "force_limit" in entry:
+                kwargs["force_limit"] = ForceLimit(**entry["force_limit"])
             parts.append(ExperimentPistonMesh(**kwargs))
 
         else:

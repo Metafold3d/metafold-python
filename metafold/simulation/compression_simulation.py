@@ -246,10 +246,19 @@ class ExperimentParallelepiped(ExperimentPrimitive):
 
 
 @dataclass
+class ForceLimit:
+    face: str
+    value: float
+
+
+@dataclass
 class ExperimentPistonBase:
     velocity: Optional[list] = field(default_factory=lambda: DEFAULT_PISTON_VELOCITY)
     contact_type: str = "rigid"
     mu: float = 0.0
+
+    force_limit: ForceLimit | None = None
+    """Apply condition to jump to zero velocity when the given force is reached."""
 
 
 @dataclass
@@ -1287,6 +1296,13 @@ class CompressionSimulation:
             if info.disabled:
                 continue
             if isinstance(info.part, (ExperimentPistonBase, ExperimentSupportBase)):
+                kwargs = {}
+                if isinstance(info.part, ExperimentPistonBase) and info.part.force_limit:
+                    kwargs.update({
+                        "condition": info.part.force_limit.face,
+                        "conditionValue": info.part.force_limit.value,
+                        "conditionAction": "GoToZeroVelocity",
+                    })
                 rigid_contacts.append(
                     Contact(
                         type=info.part.contact_type,
@@ -1295,6 +1311,7 @@ class CompressionSimulation:
                         master_material=info.material_index,
                         direction=[1, 1, 1],
                         materials=deformable_indices,
+                        **kwargs
                     )
                 )
 

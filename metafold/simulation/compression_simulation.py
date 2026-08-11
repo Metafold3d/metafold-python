@@ -1505,6 +1505,11 @@ class CompressionSimulation:
                     for row in piston_info.part.velocity
                 ]
             )
+            if piston_info.part.force_limit:
+                # Switch to using piston particle positions to determine displacement
+                self.workflow_params[f"{job_name_base}.piston_position"] = (
+                    f"/material{piston_info.material_index}/position"
+                )
 
     def _add_to_workflow_stress_strain(self, part_infos: list[PartInfo]):
         # One stress-strain job per deformable part, each normalizing the shared

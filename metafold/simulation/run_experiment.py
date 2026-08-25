@@ -379,6 +379,8 @@ def run_experiment(
     varying = _build_varying(config.get("varying", []))
     sim_params = _build_simulation_parameters(config.get("simulation", {}))
 
+    use_experimental_solver = config.get("use_experimental_solver", False)
+
     sim_kwargs: dict = dict(
         parts=parts,
         simulation_name=project_name,
@@ -387,6 +389,7 @@ def run_experiment(
         simulation_parameters=sim_params,
         project_id=project_id,
         create_project_if_needed=not bool(project_id),
+        use_experimental_solver=use_experimental_solver,
     )
     # Only pass project_name when we have to create a project. When a
     # project_id is supplied the project already exists, and passing the name

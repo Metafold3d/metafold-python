@@ -474,6 +474,8 @@ class CompressionSimulation:
     # experiment variants sampled later match the base simulation's density.
     sample_spacing: Optional[float] = None
 
+    use_experimental_solver: bool = False
+
     def __init__(
         self,
         parts: list[ExperimentPart],
@@ -503,6 +505,7 @@ class CompressionSimulation:
         project_name: str = "",
         use_legacy_results_format: bool = False,
         write_ups: bool = True,
+        use_experimental_solver: bool = False,
     ):
         if not output_path:
             if project_name:
@@ -541,6 +544,8 @@ class CompressionSimulation:
             self.client = self.setup_client(env_source, project_id)
         else:
             self.client = client
+
+        self.use_experimental_solver = use_experimental_solver
 
     def _write_ups(self, content: str, filename: str) -> None:
         if self.write_ups and self.out_dir is not None:
@@ -1370,8 +1375,12 @@ class CompressionSimulation:
         # Only parts that have a volume go into the compress assets list
         parts_with_volume = [p for p in part_infos if p.volume_filename]
 
+        job_type = "sim/custom"
+        if self.use_experimental_solver:
+            job_type = "sim/custom-gpu"
+
         self.workflow_jobs[compress_job_name] = {
-            "type": "sim/custom",
+            "type": job_type,
         }
 
         # compress.volume is a list of volume asset filenames in part order

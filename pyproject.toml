@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "metafold"
-version = "0.14.0"
+version = "0.15.dev1"
 authors = [
     {name = "Metafold 3D", email = "info@metafold3d.com"},
 ]
@@ -38,7 +38,7 @@ simulation = [
     "pandas>=2.3.3",
     "plyfile>=1.1.3",
     "pyyaml>=6.0.3",
-    "simulation-configurator==0.2.*",
+    "simulation-configurator==0.3.*",
     "tables>=3.11.1",
 ]
 

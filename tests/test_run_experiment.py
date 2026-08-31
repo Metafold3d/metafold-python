@@ -31,6 +31,7 @@ from metafold.simulation.run_experiment import (
     _resolve_material,
     run_experiment,
     run_experiment_from_zip,
+    validate_experiment_config,
 )
 from metafold.simulation.compression_experiment import (
     VaryMaterial,
@@ -657,3 +658,61 @@ class TestRunExperimentFromZip:
             result = run_experiment_from_zip(zip_path, output_path=str(tmp_path / "out"))
 
         assert result == "p"
+
+
+class TestExperimentalMaterialGuard:
+    """Orthotropic/hyperfoam are mpmgpu-only; rejected unless use_experimental_solver."""
+
+    HYPERFOAM = {
+        "density": 600.0,
+        "thermal_conductivity": 0.15,
+        "specific_heat": 1.36,
+        "constitutive_model": {
+            "type": "hyperfoam",
+            "params": {
+                "bulk_modulus": 1.0e6,
+                "terms": [{"mu": 1.6e5, "alpha": 8.9, "poisson_ratio": 0.0}],
+            },
+        },
+    }
+
+    def _config(self, **extra):
+        cfg = {
+            "project_name": "t",
+            "parts": [
+                {"type": "piston_cylinder"},
+                {"name": "foam", "material": self.HYPERFOAM, "file": "foam.ply"},
+            ],
+        }
+        cfg.update(extra)
+        return cfg
+
+    def test_rejected_without_experimental_flag(self):
+        with pytest.raises(ValueError, match="experimental solver"):
+            validate_experiment_config(self._config())
+
+    def test_allowed_with_experimental_flag(self):
+        # Should not raise.
+        validate_experiment_config(self._config(use_experimental_solver=True))
+
+    def test_ordinary_material_unaffected(self):
+        cfg = {
+            "project_name": "t",
+            "parts": [
+                {"type": "piston_cylinder"},
+                {"name": "foam", "material": "default_midsole_nominal", "file": "foam.ply"},
+            ],
+        }
+        validate_experiment_config(cfg)  # no raise
+
+    def test_varied_experimental_material_rejected(self):
+        cfg = {
+            "project_name": "t",
+            "parts": [
+                {"type": "piston_cylinder"},
+                {"name": "foam", "material": "default_midsole_nominal", "file": "foam.ply"},
+            ],
+            "varying": [{"part": "foam", "material": [self.HYPERFOAM]}],
+        }
+        with pytest.raises(ValueError, match="experimental solver"):
+            validate_experiment_config(cfg)

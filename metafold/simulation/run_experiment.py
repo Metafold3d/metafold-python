@@ -251,6 +251,34 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
     return parts
 
 
+# Constitutive models that only the experimental (mpmgpu GPU) solver supports;
+# Uintah has no equivalent, so they require use_experimental_solver.
+_EXPERIMENTAL_ONLY_MATERIALS = {
+    _materials_module.OrthotropicParams.get_type(),
+    _materials_module.HyperfoamParams.get_type(),
+}
+
+
+def _material_type(material: Material) -> str:
+    return material.constitutive_model.params.get_type()
+
+
+def _validate_experimental_materials(config: dict, parts, varying) -> None:
+    """Reject experimental-only materials unless use_experimental_solver is set."""
+    if config.get("use_experimental_solver", False):
+        return
+    materials = [p.material for p in parts]
+    for v in varying:
+        if isinstance(v, VaryMaterial):
+            materials.extend(v.materials)
+    used = {_material_type(m) for m in materials} & _EXPERIMENTAL_ONLY_MATERIALS
+    if used:
+        names = ", ".join(sorted(used))
+        raise ValueError(
+            f"Material(s) {names} are only supported with the experimental "
+            f"solver. Set use_experimental_solver to true to use them.")
+
+
 def validate_experiment_config(config: dict) -> None:
     """Raise ValueError if a manifest can't produce a runnable experiment.
     Mirrors the checks run_experiment performs so an API can reject bad
@@ -258,7 +286,10 @@ def validate_experiment_config(config: dict) -> None:
     """
     if not config.get("project_name", ""):
         raise ValueError("project_name is required")
-    validate_simulation_parts(_build_parts(config.get("parts", [])))
+    parts = _build_parts(config.get("parts", []))
+    validate_simulation_parts(parts)
+    _validate_experimental_materials(
+        config, parts, _build_varying(config.get("varying", [])))
 
 
 def _build_varying(varying_config: list[dict]) -> list[ExperimentVarying]:
@@ -378,6 +409,8 @@ def run_experiment(
     parts = _build_parts(config.get("parts", []))
     varying = _build_varying(config.get("varying", []))
     sim_params = _build_simulation_parameters(config.get("simulation", {}))
+
+    _validate_experimental_materials(config, parts, varying)
 
     use_experimental_solver = config.get("use_experimental_solver", False)
 

@@ -212,6 +212,109 @@ class MaxwellWeichertParams(ParamsBase):
 
 
 @dataclass
+class HyperfoamTerm:
+    """One Ogden term of a hyperfoam material (mpmgpu allows up to 3)."""
+    mu: float
+    alpha: float
+    poisson_ratio: float
+
+    def to_dict(self):
+        # "_element" tells the ups emitter to render this as a <term>.
+        return {
+            "_element": "term",
+            "mu": float(self.mu),
+            "alpha": float(self.alpha),
+            "poisson_ratio": float(self.poisson_ratio),
+        }
+
+
+@dataclass
+class HyperfoamParams(ParamsBase):
+    """Ogden hyperfoam (mpmgpu only; no Uintah equivalent).
+
+    An optional viscoelastic overlay (Prony series) may be supplied via
+    terminal_shear_modulus + viscoelastic_series, matching the MaxwellWeichert
+    mode structure. Omit both for a purely elastic hyperfoam.
+    """
+    bulk_modulus: float
+    terms: List[HyperfoamTerm]
+    terminal_shear_modulus: Optional[float] = None
+    viscoelastic_series: Optional[List[ViscoelasticMode]] = None
+
+    @classmethod
+    def get_type(self):
+        return "hyperfoam"
+
+    def to_dict(self):
+        d = {
+            "bulk_modulus": float(self.bulk_modulus),
+            "terms": [t.to_dict() for t in self.terms],
+        }
+        if self.terminal_shear_modulus is not None:
+            d["terminal_shear_modulus"] = float(self.terminal_shear_modulus)
+        if self.viscoelastic_series:
+            d["viscoelastic_series"] = [m.to_dict() for m in self.viscoelastic_series]
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "HyperfoamParams":
+        series = d.get("viscoelastic_series")
+        return cls(
+            bulk_modulus=d["bulk_modulus"],
+            terms=[
+                HyperfoamTerm(
+                    mu=t["mu"], alpha=t["alpha"], poisson_ratio=t["poisson_ratio"])
+                for t in d["terms"]
+            ],
+            terminal_shear_modulus=d.get("terminal_shear_modulus"),
+            viscoelastic_series=(
+                [ViscoelasticMode(**m) for m in series] if series else None),
+        )
+
+
+@dataclass
+class OrthotropicParams(ParamsBase):
+    """Linear-elastic orthotropic (mpmgpu only; no Uintah equivalent)."""
+    E1: float
+    E2: float
+    E3: float
+    nu12: float
+    nu13: float
+    nu23: float
+    G12: float
+    G13: float
+    G23: float
+    direction_a: List[float]
+    direction_b: List[float]
+
+    @classmethod
+    def get_type(self):
+        return "orthotropic"
+
+    def to_dict(self):
+        return {
+            "E1": float(self.E1), "E2": float(self.E2), "E3": float(self.E3),
+            "nu12": float(self.nu12), "nu13": float(self.nu13), "nu23": float(self.nu23),
+            "G12": float(self.G12), "G13": float(self.G13), "G23": float(self.G23),
+            # Numeric lists so simulation_configurator emits them as vectors.
+            "direction_a": [float(x) for x in self.direction_a],
+            "direction_b": [float(x) for x in self.direction_b],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "OrthotropicParams":
+        def vec(v):
+            return [float(x) for x in (v.split() if isinstance(v, str) else v)]
+        return cls(
+            E1=d["E1"], E2=d["E2"], E3=d["E3"],
+            nu12=d["nu12"], nu13=d["nu13"], nu23=d["nu23"],
+            G12=d["G12"], G13=d["G13"], G23=d["G23"],
+            direction_a=vec(d["direction_a"]),
+            direction_b=vec(d["direction_b"]),
+        )
+
+
+@dataclass
 class CompNeoHookParams(ParamsBase):
     bulk_modulus: float
     shear_modulus: float
@@ -351,6 +454,8 @@ class Material:
             ElasticPlasticParams,
             HypoElasticParams,
             ViscoTransIsoHyperParams,
+            HyperfoamParams,
+            OrthotropicParams,
         ]
         PARAMS_CLASSES = {c.get_type(): c for c in params_classes}
         cm = d["constitutive_model"]

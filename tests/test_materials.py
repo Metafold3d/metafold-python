@@ -5,10 +5,13 @@ from metafold.materials import (
     ConstitutiveModel,
     ElasticPlasticParams,
     FlowModel,
+    HyperfoamParams,
+    HyperfoamTerm,
     HypoElasticParams,
     JohnsonCookParams,
     Material,
     MaxwellWeichertParams,
+    OrthotropicParams,
     RigidParams,
     StabilityCheck,
     UCNHParams,
@@ -279,3 +282,110 @@ class TestMaterialOptionalFields:
         r = roundtrip(m)
         assert r.room_temp == 300.0
         assert r.melt_temp == 1500.0
+
+
+class TestHyperfoamParams:
+    def _material(self):
+        return Material(
+            density=600.0,
+            thermal_conductivity=0.15,
+            specific_heat=1.36,
+            constitutive_model=ConstitutiveModel(
+                params=HyperfoamParams(
+                    bulk_modulus=1.0e6,
+                    terms=[
+                        HyperfoamTerm(mu=0.16e6, alpha=8.9, poisson_ratio=0.0),
+                        HyperfoamTerm(mu=0.01e6, alpha=-2.0, poisson_ratio=0.0),
+                    ],
+                )
+            ),
+        )
+
+    def test_roundtrip(self):
+        m = self._material()
+        assert roundtrip(m).to_dict() == m.to_dict()
+
+    def test_type_key(self):
+        d = ConstitutiveModel(
+            params=HyperfoamParams(bulk_modulus=1.0, terms=[])
+        ).to_dict()
+        assert d["type"] == "hyperfoam"
+
+    def test_terms_preserved(self):
+        d = self._material().constitutive_model.params.to_dict()
+        assert len(d["terms"]) == 2
+        # "_element" marks how the ups emitter renders each term.
+        assert d["terms"][0]["_element"] == "term"
+        assert d["terms"][0]["mu"] == 0.16e6
+        assert d["terms"][1]["alpha"] == -2.0
+
+    def test_pure_elastic_omits_viscoelastic_fields(self):
+        d = self._material().constitutive_model.params.to_dict()
+        assert "terminal_shear_modulus" not in d
+        assert "viscoelastic_series" not in d
+
+    def _viscoelastic_material(self):
+        return Material(
+            density=600.0,
+            thermal_conductivity=0.15,
+            specific_heat=1.36,
+            constitutive_model=ConstitutiveModel(
+                params=HyperfoamParams(
+                    bulk_modulus=1.0e6,
+                    terms=[HyperfoamTerm(mu=0.16e6, alpha=8.9, poisson_ratio=0.0)],
+                    terminal_shear_modulus=5.0e4,
+                    viscoelastic_series=[
+                        ViscoelasticMode("m1", 0.15, 25000),
+                        ViscoelasticMode("m2", 0.20, 30000),
+                    ],
+                )
+            ),
+        )
+
+    def test_viscoelastic_overlay_roundtrip(self):
+        m = self._viscoelastic_material()
+        assert roundtrip(m).to_dict() == m.to_dict()
+
+    def test_viscoelastic_overlay_emitted(self):
+        d = self._viscoelastic_material().constitutive_model.params.to_dict()
+        assert d["terminal_shear_modulus"] == 5.0e4
+        assert len(d["viscoelastic_series"]) == 2
+        assert d["viscoelastic_series"][0]["mode"] == "m1"
+
+
+class TestOrthotropicParams:
+    def _material(self):
+        return Material(
+            density=1000.0,
+            thermal_conductivity=1.0,
+            specific_heat=1500,
+            constitutive_model=ConstitutiveModel(
+                params=OrthotropicParams(
+                    E1=1e9, E2=2e9, E3=3e9,
+                    nu12=0.3, nu13=0.3, nu23=0.3,
+                    G12=0.5e9, G13=0.5e9, G23=0.5e9,
+                    direction_a=[1.0, 0.0, 0.0],
+                    direction_b=[0.0, 1.0, 0.0],
+                )
+            ),
+        )
+
+    def test_roundtrip(self):
+        m = self._material()
+        assert roundtrip(m).to_dict() == m.to_dict()
+
+    def test_type_key(self):
+        d = ConstitutiveModel(params=self._material().constitutive_model.params).to_dict()
+        assert d["type"] == "orthotropic"
+
+    def test_directions_are_numeric_lists(self):
+        d = self._material().constitutive_model.params.to_dict()
+        assert d["direction_a"] == [1.0, 0.0, 0.0]
+        assert d["direction_b"] == [0.0, 1.0, 0.0]
+
+    def test_from_dict_accepts_string_direction(self):
+        # Directions may arrive as "x y z" strings (manifest form).
+        m = self._material()
+        d = m.to_dict()
+        d["constitutive_model"]["params"]["direction_a"] = "1 0 0"
+        assert OrthotropicParams.from_dict(d["constitutive_model"]["params"]).direction_a == [1.0, 0.0, 0.0]

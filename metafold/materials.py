@@ -232,11 +232,14 @@ class HyperfoamTerm:
 class HyperfoamParams(ParamsBase):
     """Ogden hyperfoam (mpmgpu only; no Uintah equivalent).
 
+    The Ogden hyperfoam model is defined entirely by its terms (bulk_modulus is
+    not used, so it is not part of this material; a legacy "bulk_modulus"/"K" is
+    ignored if present on from_dict).
+
     An optional viscoelastic overlay (Prony series) may be supplied via
     terminal_shear_modulus + viscoelastic_series, matching the MaxwellWeichert
     mode structure. Omit both for a purely elastic hyperfoam.
     """
-    bulk_modulus: float
     terms: List[HyperfoamTerm]
     terminal_shear_modulus: Optional[float] = None
     viscoelastic_series: Optional[List[ViscoelasticMode]] = None
@@ -247,7 +250,6 @@ class HyperfoamParams(ParamsBase):
 
     def to_dict(self):
         d = {
-            "bulk_modulus": float(self.bulk_modulus),
             "terms": [t.to_dict() for t in self.terms],
         }
         if self.terminal_shear_modulus is not None:
@@ -258,9 +260,9 @@ class HyperfoamParams(ParamsBase):
 
     @classmethod
     def from_dict(cls, d: dict) -> "HyperfoamParams":
+        # A legacy bulk_modulus/K is ignored (older scripts may still send it).
         series = d.get("viscoelastic_series")
         return cls(
-            bulk_modulus=d["bulk_modulus"],
             terms=[
                 HyperfoamTerm(
                     mu=t["mu"], alpha=t["alpha"], poisson_ratio=t["poisson_ratio"])
@@ -459,7 +461,19 @@ class Material:
         ]
         PARAMS_CLASSES = {c.get_type(): c for c in params_classes}
         cm = d["constitutive_model"]
-        params = PARAMS_CLASSES[cm["type"]].from_dict(cm["params"])
+        model_type = cm.get("type")
+        if model_type not in PARAMS_CLASSES:
+            # ValueError so API callers reject with a 400, not a 500. An
+            # unknown type usually means a client newer than the server.
+            raise ValueError(
+                f"Unknown constitutive model type {model_type!r}. "
+                f"Known types: {', '.join(sorted(PARAMS_CLASSES))}.")
+        try:
+            params = PARAMS_CLASSES[model_type].from_dict(cm["params"])
+        except KeyError as e:
+            # Missing param -> ValueError (400) rather than an uncaught 500.
+            raise ValueError(
+                f"{model_type} material is missing required param {e}.")
         return cls(
             density=d["density"],
             thermal_conductivity=d["thermal_conductivity"],

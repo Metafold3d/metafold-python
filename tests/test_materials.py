@@ -292,7 +292,6 @@ class TestHyperfoamParams:
             specific_heat=1.36,
             constitutive_model=ConstitutiveModel(
                 params=HyperfoamParams(
-                    bulk_modulus=1.0e6,
                     terms=[
                         HyperfoamTerm(mu=0.16e6, alpha=8.9, poisson_ratio=0.0),
                         HyperfoamTerm(mu=0.01e6, alpha=-2.0, poisson_ratio=0.0),
@@ -307,9 +306,29 @@ class TestHyperfoamParams:
 
     def test_type_key(self):
         d = ConstitutiveModel(
-            params=HyperfoamParams(bulk_modulus=1.0, terms=[])
+            params=HyperfoamParams(terms=[])
         ).to_dict()
         assert d["type"] == "hyperfoam"
+
+    def test_bulk_modulus_not_emitted(self):
+        # bulk_modulus is not part of the Ogden hyperfoam model.
+        d = self._material().constitutive_model.params.to_dict()
+        assert "bulk_modulus" not in d
+        assert "K" not in d
+
+    def test_legacy_bulk_modulus_ignored_on_from_dict(self):
+        # Older scripts / GH plugins may still send bulk_modulus or K — ignore it.
+        d = {
+            "type": "hyperfoam",
+            "params": {
+                "bulk_modulus": 1.0e6,
+                "K": 2.0e6,
+                "terms": [{"mu": 0.16e6, "alpha": 8.9, "poisson_ratio": 0.0}],
+            },
+        }
+        params = HyperfoamParams.from_dict(d["params"])
+        assert len(params.terms) == 1
+        assert "bulk_modulus" not in params.to_dict()
 
     def test_terms_preserved(self):
         d = self._material().constitutive_model.params.to_dict()
@@ -331,7 +350,6 @@ class TestHyperfoamParams:
             specific_heat=1.36,
             constitutive_model=ConstitutiveModel(
                 params=HyperfoamParams(
-                    bulk_modulus=1.0e6,
                     terms=[HyperfoamTerm(mu=0.16e6, alpha=8.9, poisson_ratio=0.0)],
                     terminal_shear_modulus=5.0e4,
                     viscoelastic_series=[
@@ -389,3 +407,30 @@ class TestOrthotropicParams:
         d = m.to_dict()
         d["constitutive_model"]["params"]["direction_a"] = "1 0 0"
         assert OrthotropicParams.from_dict(d["constitutive_model"]["params"]).direction_a == [1.0, 0.0, 0.0]
+
+
+class TestMaterialFromDictErrors:
+    # from_dict must raise ValueError (not KeyError) so API callers return 400,
+    # not 500. See lightcycle experiments blueprint.
+    def _material_dict(self, mtype, params):
+        return {
+            "density": 1000.0, "thermal_conductivity": 1.0, "specific_heat": 1500,
+            "constitutive_model": {"type": mtype, "params": params},
+        }
+
+    def test_unknown_type_raises_value_error(self):
+        # A client newer than the server sends a type we don't know.
+        d = self._material_dict("some_future_type", {})
+        with pytest.raises(ValueError, match="Unknown constitutive model type"):
+            Material.from_dict(d)
+
+    def test_missing_param_raises_value_error(self):
+        params = {
+            "E1": 1e9, "E2": 1e9, "E3": 1e9,
+            "nu12": 0.3, "nu13": 0.3, "nu23": 0.3,
+            "G12": 5e8, "G13": 5e8, "G23": 5e8,
+            "direction_a": [1.0, 0.0, 0.0], "direction_b": [0.0, 1.0, 0.0],
+        }
+        del params["E1"]
+        with pytest.raises(ValueError, match="missing required param"):
+            Material.from_dict(self._material_dict("orthotropic", params))

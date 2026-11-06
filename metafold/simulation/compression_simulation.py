@@ -260,6 +260,9 @@ class ExperimentPistonBase:
     force_limit: ForceLimit | None = None
     """Apply condition to jump to zero velocity when the given force is reached."""
 
+    releasable: bool = False
+    """Only constrain contact in normal direction if releasable is True."""
+
 
 @dataclass
 class ExperimentPistonMesh(ExperimentMesh, ExperimentPistonBase):
@@ -1307,6 +1310,10 @@ class CompressionSimulation:
                         "condition": info.part.force_limit.face,
                         "conditionValue": info.part.force_limit.value,
                         "conditionAction": "GoToZeroVelocity",
+                    })
+                if isinstance(info.part, ExperimentPistonBase) and info.part.releasable:
+                    kwargs.update({
+                        "normal_only": True,
                     })
                 rigid_contacts.append(
                     Contact(

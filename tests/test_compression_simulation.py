@@ -748,6 +748,20 @@ class TestSimConfig:
             assert contact.find(tag) is not None
             assert contact.find(tag).text == value
 
+    def test_releasable_contact(self, ply_folder, basic_parts, tmp_path):
+        parts = deepcopy(basic_parts)
+        parts[0].releasable = True
+        sim = CompressionSimulation(
+            parts=parts,
+            simulation_name="test_sim",
+            stl_folder_path=str(ply_folder),
+            output_path=str(tmp_path / "out"),
+            client=MagicMock(),
+        )
+        sim.create_sim_config()
+        contact = sim.ups.findall("./MaterialProperties/MPM/contact")[0]
+        contact.find("normal_only").text == "true"
+
 
 class TestStressStrainPerPart:
     """stress-strain runs once per deformable part (not one representative).

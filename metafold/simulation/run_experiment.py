@@ -221,6 +221,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["material"] = _resolve_material(entry["material"])
             if "force_limit" in entry:
                 kwargs["force_limit"] = ForceLimit(**entry["force_limit"])
+            if "releasable" in entry:
+                kwargs["releasable"] = entry["releasable"]
             parts.append(ExperimentPistonBox(**kwargs))
 
         elif part_type == "piston_mesh":
@@ -233,6 +235,8 @@ def _build_parts(parts_config: list[dict]) -> list[ExperimentPart]:
                 kwargs["material"] = _resolve_material(entry["material"])
             if "force_limit" in entry:
                 kwargs["force_limit"] = ForceLimit(**entry["force_limit"])
+            if "releasable" in entry:
+                kwargs["releasable"] = entry["releasable"]
             parts.append(ExperimentPistonMesh(**kwargs))
 
         else:
